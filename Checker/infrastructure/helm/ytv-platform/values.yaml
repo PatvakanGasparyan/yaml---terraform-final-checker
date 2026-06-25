@@ -1,0 +1,58 @@
+replicaCount: 2
+
+backend:
+  image:
+    repository: ytv-backend
+    tag: latest
+  resources:
+    requests:
+      memory: 256Mi
+      cpu: 250m
+    limits:
+      memory: 1Gi
+      cpu: 1000m
+
+frontend:
+  image:
+    repository: ytv-frontend
+    tag: latest
+  env:
+    NEXT_PUBLIC_API_URL: "https://api.example.com"
+
+worker:
+  replicaCount: 2
+  image:
+    repository: ytv-worker
+    tag: latest
+
+mysql:
+  enabled: true
+  auth:
+    database: yaml_terraform_validator
+    username: validator
+    password: validator_secret
+
+redis:
+  enabled: true
+  architecture: standalone
+
+ingress:
+  enabled: true
+  className: nginx
+  hosts:
+    - host: yaml-validator.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+          service: frontend
+    - host: api.yaml-validator.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+          service: backend
+
+monitoring:
+  prometheus:
+    enabled: true
+  grafana:
+    enabled: true

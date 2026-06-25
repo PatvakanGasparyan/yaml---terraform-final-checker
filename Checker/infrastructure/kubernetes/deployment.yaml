@@ -1,0 +1,141 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ytv-backend
+  labels:
+    app: ytv-backend
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: ytv-backend
+  template:
+    metadata:
+      labels:
+        app: ytv-backend
+    spec:
+      containers:
+        - name: backend
+          image: ytv-backend:latest
+          ports:
+            - containerPort: 8000
+          envFrom:
+            - configMapRef:
+                name: ytv-config
+            - secretRef:
+                name: ytv-secrets
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 5
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "250m"
+            limits:
+              memory: "1Gi"
+              cpu: "1000m"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ytv-backend
+spec:
+  selector:
+    app: ytv-backend
+  ports:
+    - port: 8000
+      targetPort: 8000
+  type: ClusterIP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ytv-frontend
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: ytv-frontend
+  template:
+    metadata:
+      labels:
+        app: ytv-frontend
+    spec:
+      containers:
+        - name: frontend
+          image: ytv-frontend:latest
+          ports:
+            - containerPort: 3000
+          env:
+            - name: NEXT_PUBLIC_API_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: ytv-config
+                  key: API_URL
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ytv-frontend
+spec:
+  selector:
+    app: ytv-frontend
+  ports:
+    - port: 3000
+      targetPort: 3000
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ytv-worker
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: ytv-worker
+  template:
+    metadata:
+      labels:
+        app: ytv-worker
+    spec:
+      containers:
+        - name: worker
+          image: ytv-worker:latest
+          envFrom:
+            - configMapRef:
+                name: ytv-config
+            - secretRef:
+                name: ytv-secrets
+          command: ["celery", "-A", "app.workers.celery_app", "worker", "--loglevel=info"]
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ytv-config
+data:
+  APP_ENV: "production"
+  MYSQL_HOST: "mysql-service"
+  MYSQL_PORT: "3306"
+  MYSQL_DATABASE: "yaml_terraform_validator"
+  REDIS_HOST: "redis-service"
+  REDIS_PORT: "6379"
+  API_URL: "http://ytv-backend:8000"
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: ytv-secrets
+type: Opaque
+stringData:
+  SECRET_KEY: "change-me-in-production"
+  MYSQL_USER: "validator"
+  MYSQL_PASSWORD: "validator_secret"

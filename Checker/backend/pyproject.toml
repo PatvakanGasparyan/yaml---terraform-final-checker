@@ -1,0 +1,27 @@
+[project]
+name = "yaml-terraform-validator"
+version = "1.0.0"
+description = "Enterprise YAML & Terraform AI Validator SaaS Platform"
+requires-python = ">=3.12"
+
+[tool.black]
+line-length = 100
+target-version = ["py312"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+select = ["E", "F", "I", "N", "W", "UP", "B", "C4", "SIM"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+addopts = "--cov=app --cov-report=term-missing --cov-fail-under=90"
+
+[tool.bandit]
+exclude_dirs = ["tests"]

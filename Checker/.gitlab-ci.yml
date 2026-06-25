@@ -1,0 +1,64 @@
+stages:
+  - lint
+  - test
+  - security
+  - build
+  - deploy
+
+variables:
+  PYTHON_VERSION: "3.12"
+  NODE_VERSION: "22"
+
+lint-backend:
+  stage: lint
+  image: python:3.12-slim
+  script:
+    - pip install black ruff bandit
+    - cd backend && black --check app/
+    - cd backend && ruff check app/
+    - cd backend && bandit -r app/ -ll
+
+test-backend:
+  stage: test
+  image: python:3.12-slim
+  services:
+    - mysql:8.0
+    - redis:7-alpine
+  variables:
+    MYSQL_ROOT_PASSWORD: root
+    MYSQL_DATABASE: yaml_terraform_validator
+    MYSQL_USER: validator
+    MYSQL_PASSWORD: validator_secret
+  script:
+    - pip install -r backend/requirements.txt
+    - cd backend && pytest tests/ -v
+
+lint-frontend:
+  stage: lint
+  image: node:22-alpine
+  script:
+    - cd frontend && npm install --legacy-peer-deps
+    - cd frontend && npm run lint || true
+
+security-scan:
+  stage: security
+  image: python:3.12-slim
+  script:
+    - pip install bandit semgrep
+    - bandit -r backend/app/ || true
+    - semgrep --config=auto backend/ || true
+
+build:
+  stage: build
+  image: docker:24
+  services:
+    - docker:24-dind
+  script:
+    - docker compose build
+
+deploy:
+  stage: deploy
+  script:
+    - echo "Deploy to production"
+  only:
+    - main

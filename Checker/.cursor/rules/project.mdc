@@ -1,0 +1,38 @@
+---
+description: YAML & Terraform AI Validator — project conventions for Cursor agents
+globs:
+  - "**/*"
+alwaysApply: true
+---
+
+# YAML & Terraform AI Validator
+
+Enterprise SaaS for validating YAML/Terraform with security scanning and AI analysis.
+
+## Stack
+- **Frontend:** Next.js 15, React 19, TypeScript, Tailwind CSS, ShadCN UI, TanStack Query, Zustand
+- **Backend:** FastAPI, SQLAlchemy 2.x, MySQL, Redis, Celery
+- **Deploy:** Docker Compose (frontend :3000, backend :8000, nginx :80)
+
+## Frontend rules
+- Use `@/` path aliases; client components need `'use client'`
+- Translations: `useTranslations()` hook with keys like `validation.title` — bundled English in `src/i18n/messages/en.json`
+- API calls via `src/lib/api.ts` using relative `/api/v1` (proxied to backend)
+- UI: ShadCN components in `src/components/ui/`, layout in `src/components/layout/`
+- Standalone Docker build MUST copy `public/` and `.next/static/` (see `frontend/Dockerfile`)
+
+## Backend rules
+- Public access: use `get_user_or_guest` not `get_current_user`
+- Models use `extra_data` not `metadata` (SQLAlchemy reserved)
+- AI config via env: `AI_PROVIDER`, `OPENAI_API_KEY`, `AI_SYSTEM_PROMPT`, `AI_TEMPERATURE`, `AI_MAX_TOKENS`
+
+## Do not
+- Re-add login requirement unless explicitly requested
+- Break Docker standalone static asset serving
+- Use signed INT for MySQL FK columns referencing UNSIGNED ids
+
+## Verify after frontend changes
+```bash
+docker compose build frontend && docker compose up -d frontend
+curl -I http://localhost:3000/_next/static/css/
+```

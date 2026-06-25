@@ -1,0 +1,64 @@
+pipeline {
+    agent any
+
+    environment {
+        PYTHON_VERSION = '3.12'
+        NODE_VERSION = '22'
+    }
+
+    stages {
+        stage('Lint') {
+            parallel {
+                stage('Lint Backend') {
+                    steps {
+                        sh 'pip install black ruff bandit'
+                        sh 'cd backend && black --check app/'
+                        sh 'cd backend && ruff check app/'
+                    }
+                }
+                stage('Lint Frontend') {
+                    steps {
+                        sh 'cd frontend && npm install --legacy-peer-deps'
+                        sh 'cd frontend && npm run lint || true'
+                    }
+                }
+            }
+        }
+
+        stage('Test') {
+            steps {
+                sh 'pip install -r backend/requirements.txt'
+                sh 'cd backend && pytest tests/ -v'
+            }
+        }
+
+        stage('Security Scan') {
+            steps {
+                sh 'pip install bandit semgrep'
+                sh 'bandit -r backend/app/ || true'
+                sh 'semgrep --config=auto backend/ || true'
+            }
+        }
+
+        stage('Build') {
+            steps {
+                sh 'docker compose build'
+            }
+        }
+
+        stage('Deploy') {
+            when {
+                branch 'main'
+            }
+            steps {
+                sh 'echo "Deploy to production"'
+            }
+        }
+    }
+
+    post {
+        always {
+            cleanWs()
+        }
+    }
+}

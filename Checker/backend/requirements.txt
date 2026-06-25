@@ -1,0 +1,61 @@
+# Core FastAPI stack
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+python-multipart==0.0.20
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+bcrypt==4.2.1
+pydantic==2.10.4
+pydantic-settings==2.7.0
+email-validator==2.2.0
+
+# Database
+sqlalchemy[asyncio]==2.0.36
+aiomysql==0.2.0
+alembic==1.14.0
+pymysql==1.1.1
+
+# Async & task queue
+celery[redis]==5.4.0
+redis==5.2.1
+httpx==0.28.1
+aiofiles==24.1.0
+
+# Validation engines
+pyyaml==6.0.2
+ruamel.yaml==0.18.6
+jsonschema==4.23.0
+python-hcl2==5.1.1
+
+# Security scanning (CLI wrappers - semgrep installed separately in Docker if needed)
+
+# AI / LLM
+openai==1.58.1
+tiktoken==0.8.0
+
+# Monitoring & observability
+opentelemetry-api==1.25.0
+opentelemetry-sdk==1.25.0
+opentelemetry-instrumentation-fastapi==0.46b0
+opentelemetry-instrumentation-sqlalchemy==0.46b0
+opentelemetry-exporter-otlp==1.25.0
+prometheus-client==0.21.1
+
+# Rate limiting & utilities
+slowapi==0.1.9
+python-dotenv==1.0.1
+cryptography==44.0.0
+pyotp==2.9.0
+qrcode==8.0
+
+# Testing
+pytest==8.3.4
+pytest-asyncio==0.25.0
+pytest-cov==6.0.0
+httpx==0.28.1
+
+# Code quality
+black==24.10.0
+ruff==0.8.4
+mypy==1.14.0
+bandit==1.8.0
