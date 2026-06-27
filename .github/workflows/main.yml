@@ -72,10 +72,18 @@ jobs:
             echo "=== DOWNLOAD .ENV FROM S3 ==="
             aws s3 cp s3://validator.bucket/.env .env
 
-            echo "=== STOP OLD CONTAINERS ==="
-            docker compose down || true
+            echo "=== LOCATE COMPOSE FILE ==="
 
-            echo "=== BUILD AND START ==="
-            docker compose up -d --build
+            COMPOSE_FILE=$(find . -maxdepth 3 -type f \( -name "docker-compose.yml" -o -name "compose.yml" -o -name "docker-compose.yaml" \) | head -n 1)
+            
+            if [ -z "$COMPOSE_FILE" ]; then
+              echo "ERROR: docker-compose file not found in repo"
+              exit 1
+            fi
+            
+            echo "Using compose file: $COMPOSE_FILE"
+            
+            docker compose -f $COMPOSE_FILE down || true
+            docker compose -f $COMPOSE_FILE up -d --build
 
             echo "=== DEPLOY DONE ==="
