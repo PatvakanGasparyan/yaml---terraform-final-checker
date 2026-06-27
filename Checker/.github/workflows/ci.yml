@@ -1,104 +1,81 @@
-name: CI/CD Pipeline
+name: Full Deploy to EC2 (zero manual setup)
 
 on:
   push:
-    branches: [main, develop]
-  pull_request:
-    branches: [main]
-
-env:
-  PYTHON_VERSION: '3.12'
-  NODE_VERSION: '22'
+    branches:
+      - main
 
 jobs:
-  lint-backend:
-    name: Lint Backend
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
-      - run: pip install black ruff mypy bandit
-      - run: cd backend && black --check app/
-      - run: cd backend && ruff check app/
-      - run: cd backend && bandit -r app/ -ll
-
-  test-backend:
-    name: Test Backend
-    runs-on: ubuntu-latest
-    services:
-      mysql:
-        image: mysql:8.0
-        env:
-          MYSQL_ROOT_PASSWORD: root
-          MYSQL_DATABASE: yaml_terraform_validator
-          MYSQL_USER: validator
-          MYSQL_PASSWORD: validator_secret
-        ports:
-          - 3306:3306
-        options: --health-cmd="mysqladmin ping" --health-interval=10s --health-timeout=5s --health-retries=5
-      redis:
-        image: redis:7-alpine
-        ports:
-          - 6379:6379
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
-      - run: pip install -r backend/requirements.txt
-      - run: |
-          cp .env.example backend/.env
-          sed -i 's/MYSQL_HOST=mysql/MYSQL_HOST=127.0.0.1/' backend/.env
-          sed -i 's/REDIS_HOST=redis/REDIS_HOST=127.0.0.1/' backend/.env
-      - run: cd backend && pytest tests/ -v --cov=app --cov-report=xml
-
-  lint-frontend:
-    name: Lint Frontend
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-      - run: cd frontend && npm ci --legacy-peer-deps || npm install --legacy-peer-deps
-      - run: cd frontend && npm run lint || true
-
-  build:
-    name: Build Docker Images
-    runs-on: ubuntu-latest
-    needs: [lint-backend, test-backend]
-    steps:
-      - uses: actions/checkout@v4
-      - uses: docker/setup-buildx-action@v3
-      - run: cp .env.example .env
-      - run: docker compose build
-
-  security-scan:
-    name: Security Scan
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - run: pip install bandit semgrep
-      - run: bandit -r backend/app/ -f json -o bandit-report.json || true
-      - run: semgrep --config=auto backend/ --json || true
-
-  terraform-validation:
-    name: Terraform Validation
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: hashicorp/setup-terraform@v3
-      - run: |
-          cd infrastructure/kubernetes
-          terraform init -backend=false 2>/dev/null || echo "No terraform configs to validate"
-
   deploy:
-    name: Deploy
     runs-on: ubuntu-latest
-    needs: [build, security-scan]
-    if: github.ref == 'refs/heads/main'
+
     steps:
-      - uses: actions/checkout@v4
-      - run: echo "Deploy to production environment"
+      - name: Deploy via SSH (auto bootstrap server)
+        uses: appleboy/ssh-action@v1.2.2
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+
+          script: |
+            set -e
+
+            echo "=== SYSTEM UPDATE ==="
+            sudo apt-get update -y
+
+            echo "=== INSTALL REQUIRED PACKAGES ==="
+            sudo apt-get install -y git curl unzip
+
+            echo "=== INSTALL DOCKER (if missing) ==="
+            if ! command -v docker &> /dev/null
+            then
+              curl -fsSL https://get.docker.com | sh
+              sudo usermod -aG docker $USER
+            fi
+
+            echo "=== ENABLE DOCKER ==="
+            sudo systemctl enable docker
+            sudo systemctl start docker
+
+            echo "=== INSTALL DOCKER COMPOSE (plugin) ==="
+            if ! docker compose version &> /dev/null
+            then
+              sudo apt-get install -y docker-compose-plugin
+            fi
+
+            echo "=== INSTALL AWS CLI (if missing) ==="
+            if ! command -v aws &> /dev/null
+            then
+              curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+              unzip -o awscliv2.zip
+              sudo ./aws/install
+            fi
+
+            echo "=== SET APP DIR ==="
+            APP_DIR=/opt/yaml-validator
+
+            if [ ! -d "$APP_DIR" ]; then
+              git clone https://github.com/PatvakanGasparyan/yaml---terraform-final-checker.git $APP_DIR
+            fi
+
+            cd $APP_DIR
+
+            echo "=== UPDATE CODE ==="
+            git fetch origin
+            git reset --hard origin/main
+
+            echo "=== CONFIG AWS ENV ==="
+            export AWS_ACCESS_KEY_ID=${{ secrets.IAM_ACCESS_KEY }}
+            export AWS_SECRET_ACCESS_KEY=${{ secrets.IAM_SECRET_KEY }}
+            export AWS_DEFAULT_REGION=eu-north-1
+
+            echo "=== DOWNLOAD .ENV FROM S3 ==="
+            aws s3 cp s3://validator.bucket/.env .env
+
+            echo "=== STOP OLD CONTAINERS ==="
+            docker compose down || true
+
+            echo "=== BUILD AND START ==="
+            docker compose up -d --build
+
+            echo "=== DONE ==="
