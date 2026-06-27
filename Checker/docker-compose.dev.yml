@@ -8,7 +8,7 @@ services:
   frontend:
     build:
       context: ./frontend
-      dockerfile: ../docker/Dockerfile.frontend
+      dockerfile: Dockerfile
       target: deps
     command: npm run dev
     volumes:
@@ -24,15 +24,3 @@ services:
     command: ["celery", "-A", "app.workers.celery_app", "worker", "--loglevel=debug", "--concurrency=2"]
     volumes:
       - ./backend:/app
-
-  prometheus:
-    profiles: ["monitoring"]
-
-  grafana:
-    profiles: ["monitoring"]
-
-  loki:
-    profiles: ["monitoring"]
-
-  otel-collector:
-    profiles: ["monitoring"]

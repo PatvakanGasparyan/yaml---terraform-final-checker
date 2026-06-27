@@ -20,7 +20,6 @@ YAML & Terraform AI Validator is a modern cloud-native web platform designed for
 - **GitHub Integration** — OAuth, webhooks, PR/commit validation, automatic scans
 - **Enterprise Features** — RBAC, teams, MFA, API keys, audit logs, SSO-ready
 - **Multi-language UI** — English, Russian, Armenian
-- **Monitoring** — Prometheus, Grafana, Loki, OpenTelemetry
 
 ## Screenshots
 
@@ -29,22 +28,23 @@ YAML & Terraform AI Validator is a modern cloud-native web platform designed for
 ## Architecture
 
 ```
-┌─────────────┐     ┌─────────────┐     ┌─────────────┐
-│   Frontend  │────▶│    Nginx    │────▶│   Backend   │
-│  Next.js 15 │     │   Reverse   │     │   FastAPI   │
-└─────────────┘     │    Proxy    │     └──────┬──────┘
-                    └─────────────┘            │
-                    ┌─────────────┐     ┌──────┴──────┐
-                    │   Grafana   │     │             │
-                    └──────┬──────┘     ▼             ▼
-                    ┌──────┴──────┐  ┌──────┐   ┌──────────┐
-                    │ Prometheus  │  │ MySQL│   │  Redis   │
-                    └─────────────┘  └──────┘   └────┬─────┘
-                                                     │
-                                              ┌──────┴──────┐
-                                              │Celery Worker│
-                                              └─────────────┘
+┌─────────────┐                    ┌─────────────┐
+│   Frontend  │───────────────────▶│   Backend   │
+│  Next.js 15 │                    │   FastAPI   │
+└─────────────┘                    └──────┬──────┘
+                                          │
+                                   ┌──────┴──────┐
+                                   ▼             ▼
+                              ┌──────┐     ┌──────────┐
+                              │ MySQL│     │  Redis   │
+                              └──────┘     └────┬─────┘
+                                                │
+                                         ┌──────┴──────┐
+                                         │Celery Worker│
+                                         └─────────────┘
 ```
+
+Optional: `docker compose --profile proxy up -d` adds nginx on port 80.
 
 See [docs/architecture.md](docs/architecture.md) for detailed diagrams.
 
@@ -53,8 +53,8 @@ See [docs/architecture.md](docs/architecture.md) for detailed diagrams.
 ### Prerequisites
 
 - Docker & Docker Compose v2+
-- 8GB RAM recommended
-- Ports: 80, 3000, 8000, 3306, 6379
+- 4GB RAM recommended
+- Ports: 3000, 8000, 3307, 6379
 
 ### Docker Setup
 
@@ -80,11 +80,9 @@ docker compose -f docker-compose.prod.yml up -d
 ```
 
 The application will be available at:
-- **Frontend**: http://localhost:3000
-- **API**: http://localhost:8000
-- **API Docs**: http://localhost:8000/docs
-- **Grafana**: http://localhost:3001 (admin/admin)
-- **Prometheus**: http://localhost:9090
+- **Frontend**: http://0.0.0.0:3000
+- **API**: http://0.0.0.0:8000
+- **API Docs**: http://0.0.0.0:8000/docs
 
 ## Environment Variables
 
@@ -110,7 +108,7 @@ mysql -h localhost -P 3306 -u validator -p yaml_terraform_validator
 ## GitHub Setup
 
 1. Create a GitHub OAuth App at https://github.com/settings/developers
-2. Set callback URL to `http://localhost:3000/api/auth/github/callback`
+2. Set callback URL to `http://0.0.0.0:3000/api/auth/github/callback`
 3. Add `GITHUB_CLIENT_ID` and `GITHUB_CLIENT_SECRET` to `.env`
 4. Configure webhook URL: `http://your-domain/api/v1/github/webhook`
 
@@ -140,9 +138,9 @@ Without AI configuration, the platform uses a rule-based fallback engine.
 
 ## API Documentation
 
-- **Swagger UI**: http://localhost:8000/docs
-- **ReDoc**: http://localhost:8000/redoc
-- **OpenAPI JSON**: http://localhost:8000/openapi.json
+- **Swagger UI**: http://0.0.0.0:8000/docs
+- **ReDoc**: http://0.0.0.0:8000/redoc
+- **OpenAPI JSON**: http://0.0.0.0:8000/openapi.json
 
 See [docs/api-reference.md](docs/api-reference.md) for complete API reference.
 
@@ -150,17 +148,17 @@ See [docs/api-reference.md](docs/api-reference.md) for complete API reference.
 
 ```bash
 # Register
-curl -X POST http://localhost:8000/api/v1/auth/register \
+curl -X POST http://0.0.0.0:8000/api/v1/auth/register \
   -H "Content-Type: application/json" \
   -d '{"email":"user@example.com","username":"user","password":"securepass123"}'
 
 # Login
-curl -X POST http://localhost:8000/api/v1/auth/login \
+curl -X POST http://0.0.0.0:8000/api/v1/auth/login \
   -H "Content-Type: application/json" \
   -d '{"email":"user@example.com","password":"securepass123"}'
 
 # Validate YAML
-curl -X POST http://localhost:8000/api/v1/validations/run \
+curl -X POST http://0.0.0.0:8000/api/v1/validations/run \
   -H "Authorization: Bearer YOUR_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"content":"apiVersion: v1\nkind: Pod","file_path":"pod.yaml"}'
@@ -173,7 +171,7 @@ curl -X POST http://localhost:8000/api/v1/validations/run \
 docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
 
 # Run backend tests
-cd backend && pytest tests/ -v
+cd backend && pip install -r requirements-dev.txt && pytest tests/ -v
 
 # Run linting
 cd backend && black app/ && ruff check app/

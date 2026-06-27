@@ -159,7 +159,7 @@ class Settings(BaseSettings):
         return [origin.strip() for origin in self.CORS_ORIGINS.split(",") if origin.strip()]
 
     # OpenTelemetry
-    OTEL_ENABLED: bool = True
+    OTEL_ENABLED: bool = False
     OTEL_SERVICE_NAME: str = "yaml-terraform-validator-api"
     OTEL_EXPORTER_ENDPOINT: str = "http://otel-collector:4317"
 

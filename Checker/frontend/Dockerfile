@@ -30,7 +30,8 @@ ENV ENV_FILE_PATH=/app/.env
 RUN addgroup --system --gid 1001 nodejs && adduser --system --uid 1001 nextjs
 
 COPY docker-entrypoint.sh /docker-entrypoint.sh
-RUN chmod +x /docker-entrypoint.sh
+RUN sed -i 's/\r$//' /docker-entrypoint.sh \
+    && chmod +x /docker-entrypoint.sh
 
 # Required for standalone: public assets + compiled static chunks
 COPY --from=builder /app/public ./public

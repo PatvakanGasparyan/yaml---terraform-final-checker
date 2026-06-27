@@ -7,7 +7,6 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "test": "jest",
     "test:e2e": "playwright test"
   },
   "dependencies": {
@@ -21,13 +20,6 @@
     "tailwind-merge": "^2.6.0",
     "class-variance-authority": "^0.7.1",
     "lucide-react": "^0.468.0",
-    "@radix-ui/react-dropdown-menu": "^2.1.4",
-    "@radix-ui/react-dialog": "^1.1.4",
-    "@radix-ui/react-tabs": "^1.1.2",
-    "@radix-ui/react-select": "^2.1.4",
-    "@radix-ui/react-switch": "^1.1.2",
-    "@radix-ui/react-avatar": "^1.1.2",
-    "@radix-ui/react-label": "^2.1.1",
     "@radix-ui/react-slot": "^1.1.1",
     "recharts": "^2.15.0",
     "next-themes": "^0.4.4",
@@ -46,9 +38,6 @@
     "autoprefixer": "^10.4.20",
     "eslint": "^9.16.0",
     "eslint-config-next": "^15.1.0",
-    "@playwright/test": "^1.49.0",
-    "jest": "^29.7.0",
-    "@testing-library/react": "^16.1.0",
-    "@testing-library/jest-dom": "^6.6.0"
+    "@playwright/test": "^1.49.0"
   }
 }

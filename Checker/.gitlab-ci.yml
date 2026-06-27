@@ -30,7 +30,7 @@ test-backend:
     MYSQL_USER: validator
     MYSQL_PASSWORD: validator_secret
   script:
-    - pip install -r backend/requirements.txt
+    - pip install -r backend/requirements-dev.txt
     - cd backend && pytest tests/ -v
 
 lint-frontend:

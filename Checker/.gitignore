@@ -10,7 +10,6 @@ __pycache__/
 
 # Environment
 .env
-.env.example
 .env.local
 .env.production
 bootstrap.env
@@ -19,9 +18,14 @@ bootstrap.env
 .next/
 dist/
 build/
+out/
 *.egg-info/
+*.tsbuildinfo
+.cache/
+tmp/
 
-# IDE
+# IDE & local tooling
+.cursor/
 .idea/
 .vscode/
 *.swp
@@ -39,8 +43,14 @@ htmlcov/
 .coverage
 coverage.xml
 
-# Logs
+# Logs & archives
 *.log
+*.zip
+*.tar.gz
+
+# Playwright
+.playwright/
+test-results/
 
 # Database
 *.sql.backup
