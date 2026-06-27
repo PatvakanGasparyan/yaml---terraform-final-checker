@@ -1,4 +1,4 @@
-name: Full Deploy to EC2 (zero manual setup)
+name: Full Deploy to EC2 (production stable)
 
 on:
   push:
@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Deploy via SSH (auto bootstrap server)
+      - name: Deploy to EC2 via SSH
         uses: appleboy/ssh-action@v1.2.2
         with:
           host: ${{ secrets.EC2_HOST }}
@@ -20,60 +20,51 @@ jobs:
           script: |
             set -e
 
-            echo "=== SYSTEM UPDATE ==="
+            echo "=== UPDATE SYSTEM ==="
             sudo apt-get update -y
-
-            echo "=== INSTALL REQUIRED PACKAGES ==="
             sudo apt-get install -y git curl unzip
 
-            echo "=== INSTALL DOCKER (if missing) ==="
-            if ! command -v docker &> /dev/null
-            then
+            echo "=== INSTALL DOCKER ==="
+            if ! command -v docker &> /dev/null; then
               curl -fsSL https://get.docker.com | sh
-              sudo usermod -aG docker $USER
             fi
 
-            echo "=== ENABLE DOCKER ==="
             sudo systemctl enable docker
             sudo systemctl start docker
 
-            echo "=== INSTALL DOCKER COMPOSE (plugin) ==="
-            if ! docker compose version &> /dev/null
-            then
+            echo "=== INSTALL DOCKER COMPOSE ==="
+            if ! docker compose version &> /dev/null; then
               sudo apt-get install -y docker-compose-plugin
             fi
 
-            echo "=== INSTALL AWS CLI (if missing) ==="
-            if ! command -v aws &> /dev/null
-            then
+            echo "=== INSTALL AWS CLI ==="
+            if ! command -v aws &> /dev/null; then
               curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
               unzip -o awscliv2.zip
               sudo ./aws/install
             fi
 
             echo "=== SET APP DIR ==="
-            APP_DIR=/opt/yaml-validator
+            APP_DIR=/home/ubuntu/yaml-validator
+            mkdir -p $APP_DIR
 
-            echo "=== CREATE APP DIR ==="
-            sudo mkdir -p $APP_DIR
-            sudo chown -R $USER:$USER $APP_DIR
-            
-            echo "=== CLONE / UPDATE REPO ==="
+            echo "=== CLONE OR UPDATE REPO ==="
             if [ ! -d "$APP_DIR/.git" ]; then
               git clone https://github.com/PatvakanGasparyan/yaml---terraform-final-checker.git $APP_DIR
-            else
-              cd $APP_DIR
-              git fetch origin
-              git reset --hard origin/main
             fi
-            
+
             cd $APP_DIR
 
-            echo "=== UPDATE CODE ==="
+            echo "=== SYNC LATEST CODE ==="
             git fetch origin
-            git reset --hard origin/main
 
-            echo "=== CONFIG AWS ENV ==="
+            BRANCH=$(git remote show origin | awk '/HEAD branch/ {print $NF}')
+            echo "Detected branch: $BRANCH"
+
+            git checkout $BRANCH || git checkout -b $BRANCH origin/$BRANCH
+            git reset --hard origin/$BRANCH
+
+            echo "=== AWS CONFIG ==="
             export AWS_ACCESS_KEY_ID=${{ secrets.IAM_ACCESS_KEY }}
             export AWS_SECRET_ACCESS_KEY=${{ secrets.IAM_SECRET_KEY }}
             export AWS_DEFAULT_REGION=eu-north-1
@@ -87,4 +78,4 @@ jobs:
             echo "=== BUILD AND START ==="
             docker compose up -d --build
 
-            echo "=== DONE ==="
+            echo "=== DEPLOY DONE ==="
