@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - master
+      - main
 
 concurrency:
   group: ec2-deploy-production
@@ -15,12 +16,43 @@ jobs:
     timeout-minutes: 45
 
     steps:
+      - name: Validate secrets
+        run: |
+          test -n "${{ secrets.EC2_HOST }}" || { echo "::error::Missing secret EC2_HOST"; exit 1; }
+          test -n "${{ secrets.EC2_USER }}" || { echo "::error::Missing secret EC2_USER"; exit 1; }
+          test -n "${{ secrets.EC2_SSH_KEY }}" || { echo "::error::Missing secret EC2_SSH_KEY"; exit 1; }
+          test -n "${{ secrets.IAM_ACCESS_KEY }}" || { echo "::error::Missing secret IAM_ACCESS_KEY"; exit 1; }
+          test -n "${{ secrets.IAM_SECRET_KEY }}" || { echo "::error::Missing secret IAM_SECRET_KEY"; exit 1; }
+          echo "Required secrets are set."
+
+      - name: Check EC2 SSH port is reachable
+        env:
+          EC2_HOST: ${{ secrets.EC2_HOST }}
+          EC2_PORT: ${{ secrets.EC2_PORT }}
+        run: |
+          PORT="${EC2_PORT:-22}"
+          echo "Checking TCP connectivity to ${EC2_HOST}:${PORT} ..."
+          if ! timeout 20 bash -c "echo > /dev/tcp/${EC2_HOST}/${PORT}" 2>/dev/null; then
+            echo "::error::Cannot reach EC2 on port ${PORT} (connection timed out)."
+            echo ""
+            echo "Fix in AWS Console:"
+            echo "  1. EC2 instance must be running (State: running)"
+            echo "  2. EC2_HOST secret = Public IPv4 or Elastic IP (NOT private 10.x.x.x)"
+            echo "  3. Security Group → Inbound → SSH (TCP ${PORT}) from 0.0.0.0/0"
+            echo "  4. Instance subnet must have Internet Gateway (public subnet)"
+            echo "  5. Network ACL must allow inbound/outbound on port ${PORT}"
+            exit 1
+          fi
+          echo "Port ${PORT} is reachable from GitHub runner."
+
       - name: Deploy to EC2 via SSH
         uses: appleboy/ssh-action@v1.2.2
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_SSH_KEY }}
+          port: ${{ secrets.EC2_PORT || 22 }}
+          timeout: 120s
           command_timeout: 40m
           script: |
             set -euo pipefail
