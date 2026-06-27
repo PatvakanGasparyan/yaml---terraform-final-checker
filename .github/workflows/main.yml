@@ -72,6 +72,8 @@ jobs:
             echo "=== DOWNLOAD .ENV FROM S3 ==="
             aws s3 cp s3://validator.bucket/.env .env
 
+            cp .env Checker/.env || true
+
             echo "=== LOCATE COMPOSE FILE ==="
 
             COMPOSE_FILE=$(find . -maxdepth 3 -type f \( -name "docker-compose.yml" -o -name "compose.yml" -o -name "docker-compose.yaml" \) | head -n 1)
