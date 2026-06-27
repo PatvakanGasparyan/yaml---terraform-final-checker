@@ -4,10 +4,16 @@ on:
   push:
     branches:
       - master
+      - main
+
+concurrency:
+  group: ec2-deploy-production
+  cancel-in-progress: false
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    timeout-minutes: 45
 
     steps:
       - name: Deploy to EC2 via SSH
@@ -16,76 +22,101 @@ jobs:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_SSH_KEY }}
-
+          command_timeout: 40m
           script: |
-            set -e
+            set -euo pipefail
+
+            APP_DIR="${APP_DIR:-/home/ubuntu/yaml-validator}"
+            REPO_URL="https://github.com/PatvakanGasparyan/yaml---terraform-final-checker.git"
+            COMPOSE_DIR="$APP_DIR/Checker"
+            AWS_REGION="${{ secrets.AWS_REGION }}"
+            AWS_REGION="${AWS_REGION:-eu-north-1}"
+            ENV_S3_BUCKET="${{ secrets.ENV_S3_BUCKET }}"
+            ENV_S3_BUCKET="${ENV_S3_BUCKET:-validator.bucket}"
+            ENV_S3_KEY="${{ secrets.ENV_S3_KEY }}"
+            ENV_S3_KEY="${ENV_S3_KEY:-.env}"
 
             echo "=== UPDATE SYSTEM ==="
             sudo apt-get update -y
             sudo apt-get install -y git curl unzip
 
             echo "=== INSTALL DOCKER ==="
-            if ! command -v docker &> /dev/null; then
+            if ! command -v docker >/dev/null 2>&1; then
               curl -fsSL https://get.docker.com | sh
+              sudo usermod -aG docker "$USER" || true
             fi
-
             sudo systemctl enable docker
             sudo systemctl start docker
 
-            echo "=== INSTALL DOCKER COMPOSE ==="
-            if ! docker compose version &> /dev/null; then
+            echo "=== INSTALL DOCKER COMPOSE PLUGIN ==="
+            if ! docker compose version >/dev/null 2>&1; then
               sudo apt-get install -y docker-compose-plugin
             fi
 
             echo "=== INSTALL AWS CLI ==="
-            if ! command -v aws &> /dev/null; then
-              curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
-              unzip -o awscliv2.zip
-              sudo ./aws/install
+            if ! command -v aws >/dev/null 2>&1; then
+              curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o /tmp/awscliv2.zip
+              unzip -o /tmp/awscliv2.zip -d /tmp
+              sudo /tmp/aws/install
+              rm -rf /tmp/aws /tmp/awscliv2.zip
             fi
-
-            echo "=== SET APP DIR ==="
-            APP_DIR=/home/ubuntu/yaml-validator
-            mkdir -p $APP_DIR
 
             echo "=== CLONE OR UPDATE REPO ==="
+            mkdir -p "$APP_DIR"
             if [ ! -d "$APP_DIR/.git" ]; then
-              git clone https://github.com/PatvakanGasparyan/yaml---terraform-final-checker.git $APP_DIR
+              git clone "$REPO_URL" "$APP_DIR"
             fi
 
-            cd $APP_DIR
-
-            echo "=== SYNC LATEST CODE ==="
+            cd "$APP_DIR"
             git fetch origin
 
             BRANCH=$(git remote show origin | awk '/HEAD branch/ {print $NF}')
-            echo "Detected branch: $BRANCH"
+            echo "Deploying branch: $BRANCH"
+            git checkout "$BRANCH"
+            git reset --hard "origin/$BRANCH"
 
-            git checkout $BRANCH || git checkout -b $BRANCH origin/$BRANCH
-            git reset --hard origin/$BRANCH
-
-            echo "=== AWS CONFIG ==="
-            export AWS_ACCESS_KEY_ID=${{ secrets.IAM_ACCESS_KEY }}
-            export AWS_SECRET_ACCESS_KEY=${{ secrets.IAM_SECRET_KEY }}
-            export AWS_DEFAULT_REGION=eu-north-1
-
-            echo "=== DOWNLOAD .ENV FROM S3 ==="
-            aws s3 cp s3://validator.bucket/.env .env
-
-            cp .env Checker/.env || true
-
-            echo "=== LOCATE COMPOSE FILE ==="
-
-            COMPOSE_FILE=$(find . -maxdepth 3 -type f \( -name "docker-compose.yml" -o -name "compose.yml" -o -name "docker-compose.yaml" \) | head -n 1)
-            
-            if [ -z "$COMPOSE_FILE" ]; then
-              echo "ERROR: docker-compose file not found in repo"
+            if [ ! -f "$COMPOSE_DIR/docker-compose.yml" ]; then
+              echo "ERROR: $COMPOSE_DIR/docker-compose.yml not found"
               exit 1
             fi
-            
-            echo "Using compose file AAA: $COMPOSE_FILE"
-            
-            docker compose -f $COMPOSE_FILE down || true
-            docker compose -f $COMPOSE_FILE up -d --build
 
+            cd "$COMPOSE_DIR"
+
+            echo "=== DOWNLOAD .ENV FROM S3 ==="
+            export AWS_ACCESS_KEY_ID="${{ secrets.IAM_ACCESS_KEY }}"
+            export AWS_SECRET_ACCESS_KEY="${{ secrets.IAM_SECRET_KEY }}"
+            export AWS_DEFAULT_REGION="$AWS_REGION"
+
+            aws s3 cp "s3://${ENV_S3_BUCKET}/${ENV_S3_KEY}" .env
+            chmod 600 .env
+
+            echo "=== BUILD AND START (lightweight stack) ==="
+            COMPOSE_FILES=(-f docker-compose.yml)
+            if [ -f docker-compose.prod.yml ]; then
+              COMPOSE_FILES+=(-f docker-compose.prod.yml)
+            fi
+
+            sudo docker compose "${COMPOSE_FILES[@]}" down --remove-orphans || true
+            sudo docker compose "${COMPOSE_FILES[@]}" build \
+              --build-arg "API_INTERNAL_URL=${API_INTERNAL_URL:-http://backend:8000}" \
+              --build-arg "NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://localhost:8000}"
+            sudo docker compose "${COMPOSE_FILES[@]}" up -d
+
+            echo "=== HEALTH CHECK ==="
+            for i in $(seq 1 30); do
+              if curl -fsS http://127.0.0.1:8000/health >/dev/null && curl -fsS http://127.0.0.1:3000/api/health >/dev/null; then
+                echo "Backend and frontend are healthy"
+                break
+              fi
+              if [ "$i" -eq 30 ]; then
+                echo "ERROR: services did not become healthy in time"
+                sudo docker compose "${COMPOSE_FILES[@]}" ps
+                sudo docker compose "${COMPOSE_FILES[@]}" logs --tail=80
+                exit 1
+              fi
+              sleep 5
+            done
+
+            sudo docker image prune -f || true
+            sudo docker compose "${COMPOSE_FILES[@]}" ps
             echo "=== DEPLOY DONE ==="
