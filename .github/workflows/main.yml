@@ -54,10 +54,19 @@ jobs:
             echo "=== SET APP DIR ==="
             APP_DIR=/opt/yaml-validator
 
-            if [ ! -d "$APP_DIR" ]; then
+            echo "=== CREATE APP DIR ==="
+            sudo mkdir -p $APP_DIR
+            sudo chown -R $USER:$USER $APP_DIR
+            
+            echo "=== CLONE / UPDATE REPO ==="
+            if [ ! -d "$APP_DIR/.git" ]; then
               git clone https://github.com/PatvakanGasparyan/yaml---terraform-final-checker.git $APP_DIR
+            else
+              cd $APP_DIR
+              git fetch origin
+              git reset --hard origin/main
             fi
-
+            
             cd $APP_DIR
 
             echo "=== UPDATE CODE ==="
