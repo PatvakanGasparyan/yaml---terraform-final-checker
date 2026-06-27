@@ -1,14 +1,17 @@
 # Docker Compose - Development & Default
+# All application config lives in .env (fetched from S3 on EC2 via scripts/ec2-deploy.sh)
 services:
   mysql:
     image: mysql:8.0
     container_name: ytv-mysql
     restart: unless-stopped
+    env_file:
+      - .env
     environment:
-      MYSQL_ROOT_PASSWORD: root_secret
-      MYSQL_DATABASE: yaml_terraform_validator
-      MYSQL_USER: validator
-      MYSQL_PASSWORD: validator_secret
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root_secret}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-yaml_terraform_validator}
+      MYSQL_USER: ${MYSQL_USER:-validator}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-validator_secret}
     ports:
       - "3307:3306"
     volumes:
@@ -47,25 +50,14 @@ services:
     container_name: ytv-backend
     restart: unless-stopped
     environment:
-      APP_ENV: development
-      DEBUG: "true"
-      MYSQL_HOST: mysql
-      MYSQL_PORT: 3306
-      MYSQL_USER: validator
-      MYSQL_PASSWORD: validator_secret
-      MYSQL_DATABASE: yaml_terraform_validator
-      REDIS_HOST: redis
-      REDIS_PORT: 6379
-      SECRET_KEY: dev-secret-key-change-in-production
-      CORS_ORIGINS: http://localhost:3000,http://frontend:3000,http://localhost,http://localhost:80
-      FRONTEND_URL: http://localhost:3000
-      OTEL_ENABLED: "true"
-      OTEL_EXPORTER_ENDPOINT: http://otel-collector:4317
-      AI_PROVIDER: openai
-      OPENAI_MODEL: gpt-4o-mini
-      AI_TEMPERATURE: "0.2"
-      AI_MAX_TOKENS: "8192"
-      AI_TOP_P: "0.95"
+      ENV_FILE_PATH: /app/.env
+      ENV_S3_BUCKET: ${ENV_S3_BUCKET:-}
+      ENV_S3_KEY: ${ENV_S3_KEY:-.env}
+      AWS_DEFAULT_REGION: ${AWS_DEFAULT_REGION:-}
+    volumes:
+      - ./.env:/app/.env:ro
+      - ./backend:/app
+      - backup_data:/backups
     ports:
       - "8000:8000"
     depends_on:
@@ -73,9 +65,6 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-    volumes:
-      - ./backend:/app
-      - backup_data:/backups
     networks:
       - ytv-network
 
@@ -87,21 +76,19 @@ services:
     restart: unless-stopped
     command: ["celery", "-A", "app.workers.celery_app", "worker", "--loglevel=info", "--concurrency=4"]
     environment:
-      MYSQL_HOST: mysql
-      MYSQL_USER: validator
-      MYSQL_PASSWORD: validator_secret
-      MYSQL_DATABASE: yaml_terraform_validator
-      REDIS_HOST: redis
-      CELERY_BROKER_URL: redis://redis:6379/0
-      CELERY_RESULT_BACKEND: redis://redis:6379/0
+      ENV_FILE_PATH: /app/.env
+      ENV_S3_BUCKET: ${ENV_S3_BUCKET:-}
+      ENV_S3_KEY: ${ENV_S3_KEY:-.env}
+      AWS_DEFAULT_REGION: ${AWS_DEFAULT_REGION:-}
+    volumes:
+      - ./.env:/app/.env:ro
+      - ./backend:/app
+      - backup_data:/backups
     depends_on:
       mysql:
         condition: service_healthy
       redis:
         condition: service_healthy
-    volumes:
-      - ./backend:/app
-      - backup_data:/backups
     networks:
       - ytv-network
 
@@ -113,9 +100,12 @@ services:
     restart: unless-stopped
     command: ["celery", "-A", "app.workers.celery_app", "beat", "--loglevel=info"]
     environment:
-      REDIS_HOST: redis
-      CELERY_BROKER_URL: redis://redis:6379/0
-      CELERY_RESULT_BACKEND: redis://redis:6379/0
+      ENV_FILE_PATH: /app/.env
+      ENV_S3_BUCKET: ${ENV_S3_BUCKET:-}
+      ENV_S3_KEY: ${ENV_S3_KEY:-.env}
+      AWS_DEFAULT_REGION: ${AWS_DEFAULT_REGION:-}
+    volumes:
+      - ./.env:/app/.env:ro
     depends_on:
       - redis
     networks:
@@ -125,12 +115,15 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+      args:
+        API_INTERNAL_URL: ${API_INTERNAL_URL:-http://backend:8000}
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000}
     container_name: ytv-frontend
     restart: unless-stopped
     environment:
-      NEXT_PUBLIC_API_URL: http://localhost:8000
-      API_INTERNAL_URL: http://backend:8000
-      NEXT_PUBLIC_APP_NAME: YAML & Terraform AI Validator
+      ENV_FILE_PATH: /app/.env
+    volumes:
+      - ./.env:/app/.env:ro
     ports:
       - "3000:3000"
     depends_on:
@@ -170,8 +163,9 @@ services:
     restart: unless-stopped
     ports:
       - "3001:3000"
+    env_file:
+      - .env
     environment:
-      GF_SECURITY_ADMIN_PASSWORD: admin
       GF_USERS_ALLOW_SIGN_UP: "false"
     volumes:
       - grafana_data:/var/lib/grafana

@@ -1,5 +1,47 @@
 # Deployment Guide
 
+## EC2 Deployment (S3 .env)
+
+Configuration is stored in a `.env` file in S3. The EC2 instance downloads it at deploy time.
+
+### 1. Upload `.env` to S3
+
+```bash
+aws s3 cp .env s3://your-config-bucket/checker/.env
+```
+
+### 2. Configure EC2 bootstrap (S3 pointer only — no secrets)
+
+```bash
+cp bootstrap.env.example bootstrap.env
+# Edit ENV_S3_BUCKET and ENV_S3_KEY
+```
+
+Attach an IAM role to the EC2 instance with `s3:GetObject` on your bucket.
+
+### 3. Deploy
+
+```bash
+chmod +x scripts/*.sh
+./scripts/ec2-deploy.sh
+```
+
+`ec2-deploy.sh` will:
+1. Read `bootstrap.env` for the S3 bucket/key
+2. Download `.env` from S3
+3. Build and start Docker Compose using **only** values from `.env`
+
+### How config loading works
+
+| Component | Source |
+|-----------|--------|
+| Backend / Worker / Scheduler | `app/core/env_loader.py` → reads `/app/.env` only |
+| Frontend | `docker-entrypoint.sh` sources `/app/.env` before Node starts |
+| MySQL / Grafana | `env_file: .env` in docker-compose |
+| Docker Compose interpolation | Project root `.env` (downloaded from S3) |
+
+Bootstrap variables (`ENV_S3_BUCKET`, `ENV_S3_KEY`) live in `bootstrap.env` or EC2 user-data — not in the S3 `.env` file.
+
 ## Docker Compose (Recommended)
 
 ### Development

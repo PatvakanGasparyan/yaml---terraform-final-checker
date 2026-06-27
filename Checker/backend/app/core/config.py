@@ -1,31 +1,46 @@
 """
 Application configuration module.
 
-Loads all environment variables via Pydantic Settings and provides
-a singleton Settings instance used across the entire backend.
+All configuration is loaded exclusively from the .env file.
+On EC2 the file is fetched from S3 before startup (see app.core.env_loader).
 """
 
 from functools import lru_cache
 from typing import Literal
 
 from pydantic import Field, computed_field
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings, PydanticBaseSettingsSource, SettingsConfigDict
+
+from app.core.env_loader import ensure_env_file
+
+ENV_FILE_PATH = ensure_env_file()
 
 
 class Settings(BaseSettings):
     """
     Central configuration class for the YAML & Terraform AI Validator platform.
 
-    All values are loaded from environment variables or .env file.
-    Defaults are provided for immediate Docker deployment without manual setup.
+    Values are read only from the .env file — not from the process environment.
     """
 
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=str(ENV_FILE_PATH),
         env_file_encoding="utf-8",
         case_sensitive=False,
         extra="ignore",
     )
+
+    @classmethod
+    def settings_customise_sources(
+        cls,
+        settings_cls: type[BaseSettings],
+        init_settings: PydanticBaseSettingsSource,
+        env_settings: PydanticBaseSettingsSource,
+        dotenv_settings: PydanticBaseSettingsSource,
+        file_secret_settings: PydanticBaseSettingsSource,
+    ) -> tuple[PydanticBaseSettingsSource, ...]:
+        """Load settings from .env file only (ignore os.environ)."""
+        return (dotenv_settings, init_settings)
 
     # Application metadata
     APP_NAME: str = "YAML & Terraform AI Validator"
@@ -164,9 +179,5 @@ class Settings(BaseSettings):
 
 @lru_cache
 def get_settings() -> Settings:
-    """
-    Return cached Settings singleton.
-
-    Uses lru_cache to ensure settings are loaded only once per process.
-    """
+    """Return cached Settings singleton loaded from .env only."""
     return Settings()

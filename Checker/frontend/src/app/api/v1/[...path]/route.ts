@@ -1,9 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-const backendUrl =
-  process.env.API_INTERNAL_URL ||
-  process.env.NEXT_PUBLIC_API_URL ||
-  'http://localhost:8000';
+import { API_URL } from '@/lib/env';
+
+const backendUrl = API_URL;
 
 type RouteContext = { params: Promise<{ path: string[] }> };
 

@@ -10,8 +10,10 @@ __pycache__/
 
 # Environment
 .env
+.env.example
 .env.local
 .env.production
+bootstrap.env
 
 # Build
 .next/
