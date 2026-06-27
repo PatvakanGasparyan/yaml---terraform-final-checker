@@ -3,7 +3,7 @@ name: Full Deploy to EC2 (zero manual setup)
 on:
   push:
     branches:
-      - main
+      - master
 
 jobs:
   deploy:
