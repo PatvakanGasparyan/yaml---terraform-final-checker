@@ -54,7 +54,8 @@ jobs:
         run: ruff check backend/app/ --config backend/pyproject.toml
 
       - name: Pytest
-        run: pytest backend/tests/ -v --tb=short --cov-fail-under=0
+        working-directory: Checker/backend
+        run: pytest tests/ -v --tb=short --cov-fail-under=0
 
   deploy:
     name: Deploy to EC2
