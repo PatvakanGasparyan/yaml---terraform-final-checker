@@ -6,21 +6,6 @@ services:
       - ./.env:/app/.env:ro
       - ./backend:/app
 
-  frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
-      target: deps
-    command: npm run dev
-    volumes:
-      - ./frontend:/app
-      - /app/node_modules
-    ports:
-      - "3000:3000"
-    environment:
-      NEXT_PUBLIC_API_URL: http://localhost:8000
-      API_INTERNAL_URL: http://backend:8000
-
   worker:
     profiles: ["worker"]
     command: ["celery", "-A", "app.workers.celery_app", "worker", "--loglevel=debug", "--concurrency=1"]

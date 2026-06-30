@@ -174,7 +174,7 @@ class Settings(BaseSettings):
     OTEL_EXPORTER_ENDPOINT: str = "http://otel-collector:4317"
 
     # Frontend URL
-    FRONTEND_URL: str = "http://localhost:3000"
+    FRONTEND_URL: str = "http://localhost:8000"
 
     # File upload limits
     MAX_UPLOAD_SIZE_MB: int = 50

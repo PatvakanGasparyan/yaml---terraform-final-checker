@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# EC2 ultra-minimal deploy: SQLite + 2 containers only.
+# EC2 minimal deploy: Python API only (SQLite, 1 container).
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -20,8 +20,8 @@ grep -q '^DB_ENGINE=' .env 2>/dev/null || echo "DB_ENGINE=sqlite" >> .env
 grep -q '^SQLITE_PATH=' .env 2>/dev/null || echo "SQLITE_PATH=/app/data/app.db" >> .env
 grep -q '^REDIS_HOST=' .env 2>/dev/null || echo "REDIS_HOST=disabled" >> .env
 
-echo "==> Building backend + frontend"
-docker compose -f docker-compose.ec2.yml build backend frontend
+echo "==> Building backend"
+docker compose -f docker-compose.ec2.yml build backend
 docker compose -f docker-compose.ec2.yml up -d --no-build
 
 df -h /

@@ -1,17 +1,8 @@
-# GitHub Actions CI/CD — YAML & Terraform AI Validator
+# Python API — CI/CD deploy to EC2
 #
-# Required repository secrets (Settings → Secrets and variables → Actions):
-#   EC2_HOST          — EC2 public IPv4 or Elastic IP (e.g. 51.21.100.50)
-#   EC2_USER          — SSH user (e.g. ubuntu)
-#   EC2_SSH_KEY       — Private key (full PEM contents)
-#   IAM_ACCESS_KEY    — AWS access key for S3 .env download
-#   IAM_SECRET_KEY    — AWS secret key
-#
-# Optional secrets:
-#   EC2_PORT          — SSH port (default 22)
-#   AWS_REGION        — S3 region (default eu-north-1)
-#   ENV_S3_BUCKET     — S3 bucket with .env (default validator.bucket)
-#   ENV_S3_KEY        — S3 object key (default .env)
+# Secrets (Settings → Secrets and variables → Actions):
+#   EC2_HOST, EC2_USER, EC2_SSH_KEY, IAM_ACCESS_KEY, IAM_SECRET_KEY
+# Optional: EC2_PORT, AWS_REGION, ENV_S3_BUCKET, ENV_S3_KEY
 
 name: CI/CD
 
@@ -35,11 +26,8 @@ env:
   COMPOSE_FILE: docker-compose.ec2.yml
 
 jobs:
-  # ---------------------------------------------------------------------------
-  # CI — runs on every push and pull request
-  # ---------------------------------------------------------------------------
-  ci:
-    name: Lint & Test
+  test:
+    name: Python lint & test
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -49,56 +37,31 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up Python
+      - name: Set up Python 3.12
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
           cache: pip
           cache-dependency-path: Checker/backend/requirements-dev.txt
 
-      - name: Install backend dependencies
+      - name: Install dependencies
         run: pip install -r backend/requirements-dev.txt
 
-      - name: Prepare test .env
+      - name: Prepare .env
         run: cp .env.example .env
 
-      - name: Lint backend (ruff)
+      - name: Ruff lint
         run: ruff check backend/app/ --config backend/pyproject.toml
 
-      - name: Test backend
+      - name: Pytest
         run: pytest backend/tests/ -v --tb=short --cov-fail-under=0
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: "24"
-          cache: npm
-          cache-dependency-path: Checker/frontend/package-lock.json
-
-      - name: Install frontend dependencies
-        working-directory: Checker/frontend
-        run: npm ci --legacy-peer-deps
-
-      - name: Lint frontend
-        working-directory: Checker/frontend
-        run: npm run lint
-
-      - name: Build frontend
-        working-directory: Checker/frontend
-        run: npm run build
-        env:
-          NEXT_PUBLIC_API_URL: http://localhost:8000
-          API_INTERNAL_URL: http://localhost:8000
-
-  # ---------------------------------------------------------------------------
-  # CD — deploy to EC2 on push to main/master only
-  # ---------------------------------------------------------------------------
   deploy:
     name: Deploy to EC2
-    needs: ci
+    needs: test
     if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 30
 
     concurrency:
       group: ec2-deploy-production
@@ -107,27 +70,20 @@ jobs:
     steps:
       - name: Validate secrets
         run: |
-          test -n "${{ secrets.EC2_HOST }}" || { echo "::error::Missing secret EC2_HOST"; exit 1; }
-          test -n "${{ secrets.EC2_USER }}" || { echo "::error::Missing secret EC2_USER"; exit 1; }
-          test -n "${{ secrets.EC2_SSH_KEY }}" || { echo "::error::Missing secret EC2_SSH_KEY"; exit 1; }
-          test -n "${{ secrets.IAM_ACCESS_KEY }}" || { echo "::error::Missing secret IAM_ACCESS_KEY"; exit 1; }
-          test -n "${{ secrets.IAM_SECRET_KEY }}" || { echo "::error::Missing secret IAM_SECRET_KEY"; exit 1; }
-          echo "Required secrets are set."
+          test -n "${{ secrets.EC2_HOST }}" || { echo "::error::Missing EC2_HOST"; exit 1; }
+          test -n "${{ secrets.EC2_USER }}" || { echo "::error::Missing EC2_USER"; exit 1; }
+          test -n "${{ secrets.EC2_SSH_KEY }}" || { echo "::error::Missing EC2_SSH_KEY"; exit 1; }
+          test -n "${{ secrets.IAM_ACCESS_KEY }}" || { echo "::error::Missing IAM_ACCESS_KEY"; exit 1; }
+          test -n "${{ secrets.IAM_SECRET_KEY }}" || { echo "::error::Missing IAM_SECRET_KEY"; exit 1; }
 
-      - name: Check EC2 SSH port is reachable
+      - name: Check SSH reachable
         env:
           EC2_HOST: ${{ secrets.EC2_HOST }}
           EC2_PORT: ${{ secrets.EC2_PORT }}
         run: |
           PORT="${EC2_PORT:-22}"
-          echo "Checking TCP connectivity to ${EC2_HOST}:${PORT} ..."
-          if ! timeout 20 bash -c "echo > /dev/tcp/${EC2_HOST}/${PORT}" 2>/dev/null; then
-            echo "::error::Cannot reach EC2 on port ${PORT} (connection timed out)."
-            echo "Fix: Security Group → Inbound → SSH (TCP ${PORT}) from 0.0.0.0/0"
-            echo "     EC2_HOST must be the public IPv4, instance must be running."
-            exit 1
-          fi
-          echo "Port ${PORT} is reachable."
+          timeout 20 bash -c "echo > /dev/tcp/${EC2_HOST}/${PORT}" \
+            || { echo "::error::Cannot reach ${EC2_HOST}:${PORT}"; exit 1; }
 
       - name: Deploy via SSH
         uses: appleboy/ssh-action@v1.2.2
@@ -137,7 +93,7 @@ jobs:
           key: ${{ secrets.EC2_SSH_KEY }}
           port: ${{ secrets.EC2_PORT || 22 }}
           timeout: 120s
-          command_timeout: 40m
+          command_timeout: 30m
           envs: APP_DIR,COMPOSE_FILE
           script: |
             set -euo pipefail
@@ -152,13 +108,11 @@ jobs:
             ENV_S3_KEY="${ENV_S3_KEY:-.env}"
             EC2_HOST="${{ secrets.EC2_HOST }}"
 
-            echo "=== INSTALL PREREQUISITES ==="
             sudo apt-get update -y
             sudo apt-get install -y git curl unzip
 
             if ! command -v docker >/dev/null 2>&1; then
               curl -fsSL https://get.docker.com | sh
-              sudo usermod -aG docker "$USER" || true
             fi
             sudo systemctl enable docker
             sudo systemctl start docker
@@ -174,7 +128,6 @@ jobs:
               rm -rf /tmp/aws /tmp/awscliv2.zip
             fi
 
-            echo "=== SYNC REPO ==="
             mkdir -p "$APP_DIR"
             if [ ! -d "$APP_DIR/.git" ]; then
               git clone "$REPO_URL" "$APP_DIR"
@@ -185,22 +138,12 @@ jobs:
             git checkout "${{ github.ref_name }}"
             git reset --hard "origin/${{ github.ref_name }}"
 
-            if [ ! -f "$COMPOSE_DIR/$COMPOSE_FILE" ]; then
-              echo "ERROR: $COMPOSE_DIR/$COMPOSE_FILE not found"
-              exit 1
-            fi
-
             cd "$COMPOSE_DIR"
 
-            echo "=== FREE DISK SPACE ==="
-            df -h /
             sudo docker compose -f "$COMPOSE_FILE" down --remove-orphans 2>/dev/null || true
             sudo docker builder prune -af 2>/dev/null || true
             sudo docker image prune -af 2>/dev/null || true
-            sudo apt-get clean 2>/dev/null || true
-            df -h /
 
-            echo "=== DOWNLOAD .ENV FROM S3 ==="
             export AWS_ACCESS_KEY_ID="${{ secrets.IAM_ACCESS_KEY }}"
             export AWS_SECRET_ACCESS_KEY="${{ secrets.IAM_SECRET_KEY }}"
             export AWS_DEFAULT_REGION="$AWS_REGION"
@@ -208,42 +151,28 @@ jobs:
             aws s3 cp "s3://${ENV_S3_BUCKET}/${ENV_S3_KEY}" .env
             chmod 600 .env
 
-            # Force minimal SQLite stack (override MySQL settings from S3)
-            sed -i '/^DB_ENGINE=/d; /^SQLITE_PATH=/d; /^REDIS_HOST=/d; /^API_INTERNAL_URL=/d' .env
+            sed -i '/^DB_ENGINE=/d; /^SQLITE_PATH=/d; /^REDIS_HOST=/d; /^CORS_ORIGINS=/d; /^PUBLIC_HOST=/d' .env
             echo "DB_ENGINE=sqlite" >> .env
             echo "SQLITE_PATH=/app/data/app.db" >> .env
             echo "REDIS_HOST=disabled" >> .env
-            echo "API_INTERNAL_URL=http://backend:8000" >> .env
-
-            # Public URLs for browser access
             if [ -n "$EC2_HOST" ]; then
-              sed -i '/^PUBLIC_HOST=/d; /^FRONTEND_URL=/d; /^NEXT_PUBLIC_API_URL=/d; /^CORS_ORIGINS=/d' .env
               echo "PUBLIC_HOST=$EC2_HOST" >> .env
-              echo "FRONTEND_URL=http://$EC2_HOST" >> .env
-              echo "NEXT_PUBLIC_API_URL=http://$EC2_HOST" >> .env
-              echo "CORS_ORIGINS=http://$EC2_HOST,http://$EC2_HOST:80,http://$EC2_HOST:3000,http://frontend:3000" >> .env
+              echo "CORS_ORIGINS=http://$EC2_HOST,http://$EC2_HOST:80" >> .env
             fi
 
-            echo "=== BUILD & START ==="
-            sudo docker compose -f "$COMPOSE_FILE" build backend frontend
+            sudo docker compose -f "$COMPOSE_FILE" build backend
             sudo docker compose -f "$COMPOSE_FILE" up -d --no-build
 
-            echo "=== HEALTH CHECK ==="
-            for i in $(seq 1 30); do
-              if curl -fsS http://127.0.0.1/health >/dev/null && curl -fsS http://127.0.0.1/ >/dev/null; then
-                echo "Deploy successful: http://${EC2_HOST}/"
-                break
-              fi
-              if [ "$i" -eq 30 ]; then
-                echo "ERROR: services did not become healthy in time"
-                sudo docker compose -f "$COMPOSE_FILE" ps
-                sudo docker compose -f "$COMPOSE_FILE" logs --tail=80
-                exit 1
+            for i in $(seq 1 24); do
+              if curl -fsS http://127.0.0.1/health >/dev/null \
+                && curl -fsS http://127.0.0.1/docs >/dev/null; then
+                echo "API live: http://${EC2_HOST}/docs"
+                exit 0
               fi
               sleep 5
             done
 
-            sudo docker image prune -af 2>/dev/null || true
+            echo "ERROR: API did not become healthy"
             sudo docker compose -f "$COMPOSE_FILE" ps
-            df -h /
-            echo "=== DEPLOY DONE ==="
+            sudo docker compose -f "$COMPOSE_FILE" logs --tail=60
+            exit 1

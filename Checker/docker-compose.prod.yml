@@ -9,7 +9,3 @@ services:
   backend:
     volumes:
       - ./.env:/app/.env:ro
-
-  frontend:
-    volumes:
-      - ./.env:/app/.env:ro

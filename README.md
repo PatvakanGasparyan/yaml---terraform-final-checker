@@ -4,7 +4,7 @@ Enterprise-grade SaaS platform for validating, analyzing, securing, explaining, 
 
 ![Version](https://img.shields.io/badge/version-1.0.0-blue)
 ![Python](https://img.shields.io/badge/python-3.12+-green)
-![Next.js](https://img.shields.io/badge/next.js-15+-black)
+![FastAPI](https://img.shields.io/badge/FastAPI-API-green)
 ![License](https://img.shields.io/badge/license-MIT-blue)
 
 ## Project Overview
@@ -19,29 +19,29 @@ YAML & Terraform AI Validator is a modern cloud-native web platform designed for
 - **AI Analysis** — Line-by-line explanations, risk analysis, auto-generated fixes (OpenAI, Azure, Ollama)
 - **GitHub Integration** — OAuth, webhooks, PR/commit validation, automatic scans
 - **Enterprise Features** — RBAC, teams, MFA, API keys, audit logs, SSO-ready
-- **Multi-language UI** — English, Russian, Armenian
+- **Multi-language API** — English, Russian, Armenian (i18n-ready backend)
 
-## Screenshots
+## API
 
-> Dashboard, validation interface, and security findings views are available after running the application at `http://localhost:3000`.
+> Open **Swagger UI** at `http://localhost:8000/docs` after starting the server.
 
 ## Architecture
 
 ```
-┌─────────────┐                    ┌─────────────┐
-│   Frontend  │───────────────────▶│   Backend   │
-│  Next.js 15 │                    │   FastAPI   │
-└─────────────┘                    └──────┬──────┘
-                                          │
-                                   ┌──────┴──────┐
-                                   ▼             ▼
-                              ┌──────┐     ┌──────────┐
-                              │ MySQL│     │  Redis   │
-                              └──────┘     └────┬─────┘
-                                                │
-                                         ┌──────┴──────┐
-                                         │Celery Worker│
-                                         └─────────────┘
+                         ┌─────────────┐
+                         │   FastAPI   │
+                         │   Backend   │
+                         └──────┬──────┘
+                                │
+                         ┌──────┴──────┐
+                         ▼             ▼
+                    ┌──────┐     ┌──────────┐
+                    │ MySQL│     │  Redis   │
+                    └──────┘     └────┬─────┘
+                                      │
+                               ┌──────┴──────┐
+                               │Celery Worker│
+                               └─────────────┘
 ```
 
 Optional: `docker compose --profile proxy up -d` adds nginx on port 80.
@@ -54,8 +54,8 @@ See [docs/architecture.md](docs/architecture.md) for detailed diagrams.
 
 - Docker & Docker Compose v2+
 - 4GB RAM minimum (8GB recommended for Docker builds)
-- EC2 minimal: **8 GB disk** | Full stack: **20 GB disk**
-- Ports: 3000, 8000, 3307, 6379
+- EC2 minimal: **8 GB disk** | Full stack: **16 GB disk**
+- Ports: **8000** (API), 3307, 6379 (full stack only)
 
 ### Docker Setup
 
@@ -68,12 +68,14 @@ docker compose build
 docker compose up -d
 ```
 
-**EC2 minimal (recommended for small servers):** 2 containers, ~700 MB images, **8 GB disk OK**
+**EC2 minimal (recommended for small servers):** 1 container, SQLite, **8 GB disk OK**
 
 ```bash
 cd Checker
 docker compose -f docker-compose.ec2.yml up -d --build
 ```
+
+API at `http://YOUR_IP/docs` (port 80 mapped to 8000).
 
 Uses **SQLite** (no MySQL) and **no Redis/Celery**.
 
@@ -84,7 +86,7 @@ cd Checker
 docker compose up -d --build
 ```
 
-4 containers: mysql + redis + backend + frontend.
+3 containers: mysql + redis + backend.
 
 ### Production Deployment
 
@@ -202,10 +204,16 @@ cd backend && pip install -r requirements-dev.txt && pytest tests/ -v
 
 # Run linting
 cd backend && black app/ && ruff check app/
-
-# Frontend development
-cd frontend && npm install && npm run dev
 ```
+
+## GitHub CI/CD
+
+Workflow: `.github/workflows/ci-cd.yml`
+
+- **test** — ruff + pytest on every push/PR
+- **deploy** — SSH to EC2, build 1 Python container, health check `/health` + `/docs`
+
+Required secrets: `EC2_HOST`, `EC2_USER`, `EC2_SSH_KEY`, `IAM_ACCESS_KEY`, `IAM_SECRET_KEY`
 
 ## Troubleshooting
 
@@ -213,14 +221,13 @@ cd frontend && npm install && npm run dev
 |-------|----------|
 | MySQL connection refused | Wait for health check: `docker compose ps` |
 | Backend 500 on startup | Check logs: `docker compose logs backend` |
-| Frontend build fails | Run `npm install --legacy-peer-deps` in frontend/ |
 | AI analysis not working | Verify `OPENAI_API_KEY` or use Ollama fallback |
 | GitHub OAuth fails | Check callback URL matches GitHub app settings |
 
 ## FAQ
 
 **Q: Can I run without Docker?**
-A: Yes. Install Python 3.12+, Node.js 22+, MySQL 8, Redis. Run backend with `uvicorn app.main:app` and frontend with `npm run dev`.
+A: Yes. Install Python 3.12+, MySQL 8 (optional), Redis (optional). Run `uvicorn app.main:app --reload` from `Checker/backend`.
 
 **Q: Is AI analysis required?**
 A: No. The platform includes a rule-based fallback that works without any AI provider.
