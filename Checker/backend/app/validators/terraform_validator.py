@@ -202,7 +202,6 @@ class TerraformValidator:
 
         for match in self.PROVIDER_PATTERN.finditer(self.content):
             provider_name = match.group(1)
-            provider_block = self._extract_block(match.start())
             line = self.content[: match.start()].count("\n") + 1
 
             # Check for version constraints in terraform block
@@ -511,8 +510,8 @@ class TerraformValidator:
                 )
 
                 if result.returncode != 0:
-                    # Get formatted version
-                    fmt_result = subprocess.run(
+                    # Apply terraform fmt so we can read the corrected file
+                    subprocess.run(
                         ["terraform", "fmt", "-no-color"],
                         capture_output=True,
                         text=True,

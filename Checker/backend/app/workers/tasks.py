@@ -122,19 +122,20 @@ def run_mysql_backup() -> dict[str, str]:
     backup_file = backup_dir / f"backup_{timestamp}.sql"
 
     try:
-        subprocess.run(
-            [
-                "mysqldump",
-                f"-h{settings.MYSQL_HOST}",
-                f"-P{settings.MYSQL_PORT}",
-                f"-u{settings.MYSQL_USER}",
-                f"-p{settings.MYSQL_PASSWORD}",
-                settings.MYSQL_DATABASE,
-            ],
-            stdout=open(backup_file, "w"),
-            check=True,
-            timeout=300,
-        )
+        with open(backup_file, "w") as backup_out:
+            subprocess.run(
+                [
+                    "mysqldump",
+                    f"-h{settings.MYSQL_HOST}",
+                    f"-P{settings.MYSQL_PORT}",
+                    f"-u{settings.MYSQL_USER}",
+                    f"-p{settings.MYSQL_PASSWORD}",
+                    settings.MYSQL_DATABASE,
+                ],
+                stdout=backup_out,
+                check=True,
+                timeout=300,
+            )
         logger.info(f"Backup created: {backup_file}")
         return {"status": "success", "file": str(backup_file)}
     except Exception as e:

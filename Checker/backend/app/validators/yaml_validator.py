@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 import yaml
-from jsonschema import Draft7Validator, ValidationError as JsonSchemaValidationError
+from jsonschema import Draft7Validator
 
 from app.schemas import SeverityLevel, ValidationFinding
 
@@ -440,7 +440,7 @@ class YamlValidator:
         findings: list[ValidationFinding] = []
         indent_sizes: set[int] = set()
 
-        for i, line in enumerate(self.lines, 1):
+        for line in self.lines:
             if line.strip() and not line.strip().startswith("#"):
                 indent = len(line) - len(line.lstrip())
                 if indent > 0:
