@@ -1,17 +1,18 @@
-# EC2 minimal image — SQLite, no MySQL client
+# syntax=docker/dockerfile:1
+# EC2 minimal image — SQLite, multi-stage, pip layer cached separately from app code
 FROM python:3.12-slim AS builder
 
-ENV PIP_NO_CACHE_DIR=1
 WORKDIR /app
 
-COPY requirements-minimal.txt requirements.txt
-RUN pip install --upgrade pip && pip install -r requirements.txt
+COPY requirements-minimal.txt .
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install --upgrade pip \
+    && pip install -r requirements-minimal.txt
 
 FROM python:3.12-slim AS runner
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    PIP_NO_CACHE_DIR=1 \
     ENV_FILE_PATH=/app/.env \
     DB_ENGINE=sqlite \
     SQLITE_PATH=/app/data/app.db \
@@ -27,19 +28,19 @@ RUN apt-get update && apt-get install -y --no-install-recommends curl gosu \
 COPY --from=builder /usr/local/lib/python3.12/site-packages /usr/local/lib/python3.12/site-packages
 COPY --from=builder /usr/local/bin /usr/local/bin
 
-COPY . .
+# App code in a late layer — requirements layer stays cached when only code changes
+COPY app ./app
 COPY docker-entrypoint.ec2.sh /docker-entrypoint.sh
 RUN sed -i 's/\r$//' /docker-entrypoint.sh \
     && chmod +x /docker-entrypoint.sh \
     && chown -R appuser:appuser /app
 
-# Root needed to chown the SQLite volume on startup
 USER root
 
 EXPOSE 8000
 
-HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-    CMD curl -f http://localhost:8000/health || exit 1
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+    CMD curl -fsS http://localhost:8000/health || exit 1
 
 ENTRYPOINT ["/docker-entrypoint.sh"]
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

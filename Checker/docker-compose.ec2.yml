@@ -1,10 +1,11 @@
 # EC2 minimal — Python FastAPI only (1 container, port 80)
+# Set BACKEND_IMAGE to a pre-built registry image for fast deploy (CI/CD).
 services:
   backend:
+    image: ${BACKEND_IMAGE:-ytv-backend:latest}
     build:
       context: ./backend
       dockerfile: Dockerfile.ec2
-    image: ytv-backend:latest
     container_name: ytv-backend
     restart: unless-stopped
     ports:

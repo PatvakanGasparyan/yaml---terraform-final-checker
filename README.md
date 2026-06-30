@@ -210,8 +210,15 @@ cd backend && black app/ && ruff check app/
 
 Workflow: `.github/workflows/ci-cd.yml`
 
-- **test** — ruff + pytest on every push/PR
-- **deploy** — SSH to EC2, build 1 Python container, health check `/health` + `/docs`
+| Job | What it does | Typical time |
+|-----|----------------|--------------|
+| **test** | ruff + pytest (no coverage) | ~30s |
+| **build** | Docker build on GHA with layer cache → push to GHCR | ~45s (cached) |
+| **deploy** | EC2: git pull, S3 `.env`, `docker pull`, restart | ~30s |
+
+**One-time EC2 setup:** `bash Checker/scripts/ec2-bootstrap.sh`
+
+**GHCR pull (private packages):** add secret `GHCR_PULL_TOKEN` (read:packages PAT), or set the package public under GitHub → Packages.
 
 Required secrets: `EC2_HOST`, `EC2_USER`, `EC2_SSH_KEY`, `IAM_ACCESS_KEY`, `IAM_SECRET_KEY`
 
