@@ -3,17 +3,7 @@ API integration tests for authentication endpoints.
 """
 
 import pytest
-from httpx import ASGITransport, AsyncClient
-
-from app.main import app
-
-
-@pytest.fixture
-async def client():
-    """Create async test client."""
-    transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://test") as ac:
-        yield ac
+from httpx import AsyncClient
 
 
 @pytest.mark.asyncio
@@ -57,7 +47,6 @@ async def test_register_user(client: AsyncClient) -> None:
             "full_name": "Test User",
         },
     )
-    # May fail if DB not available in test env - accept 201 or 500
     assert response.status_code in (201, 400, 500)
 
 
