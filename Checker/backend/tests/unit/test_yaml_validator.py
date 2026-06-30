@@ -63,7 +63,7 @@ spec:
 
     def test_tab_detection(self) -> None:
         """Tab characters should trigger best practice warning."""
-        content = "name:\tvalue"
+        content = "parent:\n\tchild: value"
         result = YamlValidator(content, "test.yaml").validate_all()
         assert any(f.rule_id == "YAML_BP001" for f in result.findings)
 

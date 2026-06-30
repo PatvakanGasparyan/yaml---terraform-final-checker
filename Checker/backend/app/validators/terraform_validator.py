@@ -271,7 +271,8 @@ class TerraformValidator:
             # Open security group
             if resource_type == "aws_security_group":
                 block = self._extract_block(match.start())
-                if 'cidr_blocks = ["0.0.0.0/0"]' in block.replace(" ", ""):
+                normalized = re.sub(r"\s+", "", block)
+                if 'cidr_blocks=["0.0.0.0/0"]' in normalized:
                     findings.append(
                         ValidationFinding(
                             file_path=self.file_path,

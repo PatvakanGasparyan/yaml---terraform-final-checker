@@ -35,6 +35,7 @@ async def client() -> AsyncClient:
     """HTTP client with FastAPI lifespan enabled (DB init + guest user)."""
     from app.main import app
 
-    transport = ASGITransport(app=app, lifespan="on")
-    async with AsyncClient(transport=transport, base_url="http://test") as ac:
-        yield ac
+    async with app.router.lifespan_context(app):
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as ac:
+            yield ac

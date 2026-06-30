@@ -205,7 +205,8 @@ class YamlValidator:
             return "github_actions"
         if self.GITLAB_CI_INDICATORS.intersection(set(content_lower.split())):
             return "gitlab_ci"
-        if self.COMPOSE_INDICATORS.intersection(set(content_lower.split())):
+        tokens = set(content_lower.split())
+        if "services:" in tokens:
             return "docker_compose"
 
         return "generic"
