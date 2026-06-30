@@ -1,9 +1,8 @@
 """
-Environment loader — single source of truth is a .env file.
+Environment loader — ensures the .env file exists before the app imports settings.
 
-On EC2, the file is downloaded from S3 when ENV_S3_BUCKET is set (via bootstrap.env
-or instance environment). Application settings are read from the file only, not from
-the process environment.
+On EC2, deploy downloads .env from S3 onto the host; compose mounts it at /app/.env.
+Docker/compose environment variables (DB_ENGINE, REDIS_HOST, etc.) override .env at runtime.
 """
 
 from __future__ import annotations

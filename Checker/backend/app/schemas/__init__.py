@@ -129,6 +129,8 @@ class ValidationRequest(BaseModel):
     branch: Optional[str] = None
     include_ai_analysis: bool = True
     include_security_scan: bool = True
+    auto_fix: bool = Field(default=False, description="Apply automatic fixes (--fix mode)")
+    use_cache: bool = Field(default=True, description="Use validation result cache when enabled")
     language: str = "en"
 
 
@@ -206,6 +208,14 @@ class ValidationHistoryResponse(BaseModel):
     duration_ms: Optional[int]
     summary: Optional[str]
     created_at: datetime
+
+
+class ValidationDetailResponse(ValidationResponse):
+    """Full validation record including persisted metadata."""
+
+    branch: Optional[str] = None
+    commit_sha: Optional[str] = None
+    created_at: Optional[datetime] = None
 
 
 class ValidationHistoryFilter(BaseModel):

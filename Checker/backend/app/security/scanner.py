@@ -209,12 +209,22 @@ class SecurityScanner:
 
     def _run_checkov(self) -> list[SecurityFinding] | None:
         """Run Checkov IaC scanner."""
-        return self._run_cli_scanner(
-            ["checkov", "-d", "--output", "json", "--quiet"],
-            "checkov",
-            self._parse_checkov_output,
-            ".tf" if self.file_type == "terraform" else ".yaml",
-        )
+        try:
+            with tempfile.TemporaryDirectory() as tmpdir:
+                ext = ".tf" if self.file_type == "terraform" else ".yaml"
+                file_path = Path(tmpdir) / f"scan{ext}"
+                file_path.write_text(self.content)
+                result = subprocess.run(
+                    ["checkov", "-d", tmpdir, "--output", "json", "--quiet"],
+                    capture_output=True,
+                    text=True,
+                    timeout=120,
+                )
+                if result.stdout:
+                    return self._parse_checkov_output(result.stdout, "checkov")
+        except (FileNotFoundError, subprocess.TimeoutExpired):
+            return None
+        return []
 
     def _run_tfsec(self) -> list[SecurityFinding] | None:
         """Run tfsec Terraform scanner."""

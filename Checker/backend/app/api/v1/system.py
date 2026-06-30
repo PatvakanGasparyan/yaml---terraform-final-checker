@@ -3,6 +3,7 @@
 from fastapi import APIRouter
 
 from app.core.config import get_settings
+from app.plugins.registry import get_plugin_registry
 
 router = APIRouter(prefix="/system", tags=["System"])
 settings = get_settings()
@@ -31,6 +32,19 @@ async def get_system_config() -> dict:
             "configured": ai_configured,
             "temperature": settings.AI_TEMPERATURE,
             "max_tokens": settings.AI_MAX_TOKENS,
+            "timeout_seconds": settings.AI_TIMEOUT_SECONDS,
+            "max_retries": settings.AI_MAX_RETRIES,
             "custom_prompt": bool(settings.AI_SYSTEM_PROMPT.strip()),
         },
+        "cache": {
+            "enabled": settings.VALIDATION_CACHE_ENABLED,
+            "ttl_seconds": settings.VALIDATION_CACHE_TTL,
+        },
+        "plugins": get_plugin_registry().list_plugins(),
     }
+
+
+@router.get("/plugins")
+async def list_plugins() -> list[dict]:
+    """List registered validator plugins."""
+    return get_plugin_registry().list_plugins()

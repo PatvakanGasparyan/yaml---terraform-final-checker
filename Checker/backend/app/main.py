@@ -13,9 +13,8 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from prometheus_client import Counter, Histogram, generate_latest
-from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
-from slowapi.util import get_remote_address
 from sqlalchemy import text
 from starlette.responses import Response
 
@@ -23,6 +22,8 @@ from app.api.deps import get_guest_user
 from app.api.v1 import api_router
 from app.core.config import get_settings
 from app.core.database import AsyncSessionLocal, engine, init_db
+from app.core.limiter import limiter
+from app.logging.setup import setup_logging
 from app.schemas import HealthResponse
 from app.services.auth_service import AuthService
 
@@ -33,8 +34,7 @@ logger = logging.getLogger(__name__)
 REQUEST_COUNT = Counter("http_requests_total", "Total HTTP requests", ["method", "endpoint", "status"])
 REQUEST_LATENCY = Histogram("http_request_duration_seconds", "HTTP request latency")
 
-# Rate limiter
-limiter = Limiter(key_func=get_remote_address, default_limits=[f"{settings.RATE_LIMIT_PER_MINUTE}/minute"])
+limiter.default_limits = [f"{settings.RATE_LIMIT_PER_MINUTE}/minute"]
 
 
 def setup_opentelemetry() -> None:
@@ -70,17 +70,27 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     Runs startup tasks (DB init, role seeding) and cleanup on shutdown.
     """
+    logger = logging.getLogger(__name__)
+    setup_logging(level=settings.LOG_LEVEL, json_format=settings.LOG_JSON)
     logger.info(f"Starting {settings.APP_NAME} v{settings.APP_VERSION}")
+    logger.info(
+        "Runtime config: DB_ENGINE=%s SQLITE_PATH=%s REDIS_HOST=%s",
+        settings.DB_ENGINE,
+        settings.SQLITE_PATH,
+        settings.REDIS_HOST,
+    )
 
-    # Initialize database tables
-    await init_db()
+    try:
+        await init_db()
 
-    # Seed default roles and guest user for public access
-    async with AsyncSessionLocal() as session:
-        auth_service = AuthService(session)
-        await auth_service.seed_default_roles()
-        await get_guest_user(session)
-        await session.commit()
+        async with AsyncSessionLocal() as session:
+            auth_service = AuthService(session)
+            await auth_service.seed_default_roles()
+            await get_guest_user(session)
+            await session.commit()
+    except Exception:
+        logger.exception("Application startup failed during database initialization")
+        raise
 
     setup_opentelemetry()
     logger.info("Application startup complete")

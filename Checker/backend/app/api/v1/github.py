@@ -181,6 +181,11 @@ async def github_webhook(
 
     payload = await request.json()
 
+    if not settings.redis_enabled:
+        return MessageResponse(
+            message=f"Webhook received ({x_github_event}); async processing disabled (Redis not configured)"
+        )
+
     if x_github_event == "push":
         # Queue validation task for push event
         from app.workers.tasks import run_webhook_validation

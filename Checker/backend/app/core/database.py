@@ -6,6 +6,7 @@ injection helper for FastAPI route handlers.
 """
 
 from collections.abc import AsyncGenerator
+from pathlib import Path
 
 from sqlalchemy import event, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
@@ -14,6 +15,9 @@ from sqlalchemy.orm import DeclarativeBase
 from app.core.config import get_settings
 
 settings = get_settings()
+
+if settings.DB_ENGINE == "sqlite":
+    Path(settings.SQLITE_PATH).expanduser().parent.mkdir(parents=True, exist_ok=True)
 
 _engine_kwargs: dict = {"echo": settings.DEBUG}
 if settings.DB_ENGINE == "sqlite":

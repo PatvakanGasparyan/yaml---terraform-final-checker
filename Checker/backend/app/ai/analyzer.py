@@ -9,12 +9,12 @@ import json
 import re
 from typing import Any
 
-from openai import AsyncOpenAI
-
+from app.ai.openai_client import OpenAIClient, OpenAIClientError
 from app.core.config import get_settings
 from app.schemas import LineExplanation, SeverityLevel, ValidationFinding
 
 settings = get_settings()
+logger = __import__("logging").getLogger(__name__)
 
 
 class AIAnalyzer:
@@ -27,37 +27,16 @@ class AIAnalyzer:
 
     def __init__(self) -> None:
         """Initialize AI client based on configured provider."""
-        self.provider = settings.AI_PROVIDER
-        self.client = self._create_client()
-        self.model = self._get_model()
+        self._client = OpenAIClient()
+        self.provider = self._client.provider
+        self.model = self._client.model
 
-    def _create_client(self) -> AsyncOpenAI | None:
-        """Create OpenAI-compatible async client for configured provider."""
-        if self.provider == "openai" and settings.OPENAI_API_KEY:
-            return AsyncOpenAI(
-                api_key=settings.OPENAI_API_KEY,
-                base_url=settings.OPENAI_BASE_URL,
-            )
-        if self.provider == "azure" and settings.AZURE_OPENAI_API_KEY:
-            return AsyncOpenAI(
-                api_key=settings.AZURE_OPENAI_API_KEY,
-                base_url=f"{settings.AZURE_OPENAI_ENDPOINT}/openai/deployments/{settings.AZURE_OPENAI_DEPLOYMENT}",
-                default_headers={"api-key": settings.AZURE_OPENAI_API_KEY},
-            )
-        if self.provider in ("ollama", "local"):
-            return AsyncOpenAI(
-                api_key="ollama",
-                base_url=settings.OLLAMA_BASE_URL + "/v1",
-            )
+    def _create_client(self) -> None:
+        """Deprecated — use OpenAIClient."""
         return None
 
     def _get_model(self) -> str:
-        """Get model name for current provider."""
-        if self.provider == "azure":
-            return settings.AZURE_OPENAI_DEPLOYMENT
-        if self.provider in ("ollama", "local"):
-            return settings.OLLAMA_MODEL
-        return settings.OPENAI_MODEL
+        return self.model
 
     async def analyze_code(
         self,
@@ -78,7 +57,7 @@ class AIAnalyzer:
         Returns:
             Dict with explanations, risk_analysis, suggestions, corrections.
         """
-        if self.client is None:
+        if not self._client.is_available:
             return self._fallback_analysis(content, file_path, language)
 
         lang_names = {"en": "English", "ru": "Russian", "hy": "Armenian"}
@@ -110,25 +89,12 @@ Return valid JSON only."""
         user_prompt = f"File: {file_path}\nLanguage: {language}\n\n```\n{content}\n```"
 
         try:
-            response = await self.client.chat.completions.create(
-                model=self.model,
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt},
-                ],
-                temperature=settings.AI_TEMPERATURE,
-                max_tokens=settings.AI_MAX_TOKENS,
-                top_p=settings.AI_TOP_P,
-                response_format={"type": "json_object"},
-            )
-
-            result_text = response.choices[0].message.content or "{}"
-            result = json.loads(result_text)
+            result = await self._client.analyze_json(system_prompt, user_prompt)
             result["ai_model"] = self.model
-            result["tokens_used"] = response.usage.total_tokens if response.usage else 0
+            result.setdefault("tokens_used", 0)
             return result
-
-        except Exception:
+        except OpenAIClientError:
+            logger.warning("AI analysis failed; using rule-based fallback")
             return self._fallback_analysis(content, file_path, language)
 
     async def explain_lines(
@@ -201,7 +167,9 @@ Return valid JSON only."""
         corrected = "\n".join(lines)
 
         # Try AI for comprehensive fix if client available
-        if self.client and any(f.severity in (SeverityLevel.CRITICAL, SeverityLevel.HIGH) for f in findings):
+        if self._client.is_available and any(
+            f.severity in (SeverityLevel.CRITICAL, SeverityLevel.HIGH) for f in findings
+        ):
             try:
                 analysis = await self.analyze_code(content, "fix", language)
                 if analysis.get("corrected_content"):

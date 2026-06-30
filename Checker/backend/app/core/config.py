@@ -1,8 +1,8 @@
 """
 Application configuration module.
 
-All configuration is loaded exclusively from the .env file.
-On EC2 the file is fetched from S3 before startup (see app.core.env_loader).
+Primary source is the .env file (on EC2 fetched from S3 before startup).
+Docker/compose environment variables override .env for runtime flags such as DB_ENGINE.
 """
 
 from functools import lru_cache
@@ -20,7 +20,7 @@ class Settings(BaseSettings):
     """
     Central configuration class for the YAML & Terraform AI Validator platform.
 
-    Values are read only from the .env file — not from the process environment.
+    Values load from .env; process environment overrides for Docker-injected settings.
     """
 
     model_config = SettingsConfigDict(
@@ -39,8 +39,8 @@ class Settings(BaseSettings):
         dotenv_settings: PydanticBaseSettingsSource,
         file_secret_settings: PydanticBaseSettingsSource,
     ) -> tuple[PydanticBaseSettingsSource, ...]:
-        """Load settings from .env file only (ignore os.environ)."""
-        return (dotenv_settings, init_settings)
+        """Load .env first; Docker/compose env vars override for runtime flags (DB_ENGINE, etc.)."""
+        return (dotenv_settings, env_settings, init_settings)
 
     # Application metadata
     APP_NAME: str = "YAML & Terraform AI Validator"
@@ -63,8 +63,8 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
 
-    # Database
-    DB_ENGINE: Literal["sqlite", "mysql"] = "mysql"
+    # Database — default sqlite for EC2/minimal Docker; override via .env or Docker env
+    DB_ENGINE: Literal["sqlite", "mysql"] = "sqlite"
     SQLITE_PATH: str = "/app/data/app.db"
     MYSQL_HOST: str = "mysql"
     MYSQL_PORT: int = 3306
@@ -91,7 +91,12 @@ class Settings(BaseSettings):
     @computed_field  # type: ignore[prop-decorator]
     @property
     def SYNC_DATABASE_URL(self) -> str:
-        """Build sync MySQL connection URL for Alembic migrations."""
+        """Build sync database URL for Alembic migrations."""
+        if self.DB_ENGINE == "sqlite":
+            path = self.SQLITE_PATH
+            if path.startswith("/"):
+                return f"sqlite:///{path}"
+            return f"sqlite:///./{path}"
         return (
             f"mysql+pymysql://{self.MYSQL_USER}:{self.MYSQL_PASSWORD}"
             f"@{self.MYSQL_HOST}:{self.MYSQL_PORT}/{self.MYSQL_DATABASE}"
@@ -135,6 +140,17 @@ class Settings(BaseSettings):
     AI_MAX_TOKENS: int = 8192
     AI_TOP_P: float = 0.95
     AI_SYSTEM_PROMPT: str = ""
+    AI_TIMEOUT_SECONDS: float = 120.0
+    AI_MAX_RETRIES: int = 3
+
+    # Validation cache
+    VALIDATION_CACHE_ENABLED: bool = True
+    VALIDATION_CACHE_TTL: int = 3600
+    VALIDATION_CACHE_MAX_SIZE: int = 256
+
+    # Logging
+    LOG_LEVEL: str = "INFO"
+    LOG_JSON: bool = False
 
     # GitHub OAuth
     GITHUB_CLIENT_ID: str = ""
@@ -189,5 +205,5 @@ class Settings(BaseSettings):
 
 @lru_cache
 def get_settings() -> Settings:
-    """Return cached Settings singleton loaded from .env only."""
+    """Return cached Settings singleton (.env + Docker env overrides)."""
     return Settings()

@@ -1,5 +1,5 @@
-# EC2 minimal — Python FastAPI only (1 container, port 80)
-# Set BACKEND_IMAGE to a pre-built registry image for fast deploy (CI/CD).
+# EC2 stack — backend + Next.js frontend + nginx (public port 80)
+# Set BACKEND_IMAGE / FRONTEND_IMAGE to pre-built GHCR images for CI/CD deploy.
 services:
   backend:
     image: ${BACKEND_IMAGE:-ytv-backend:latest}
@@ -8,16 +8,62 @@ services:
       dockerfile: Dockerfile.ec2
     container_name: ytv-backend
     restart: unless-stopped
-    ports:
-      - "80:8000"
+    expose:
+      - "8000"
     environment:
       ENV_FILE_PATH: /app/.env
+      APP_ENV: production
+      DEBUG: "false"
       DB_ENGINE: sqlite
       SQLITE_PATH: /app/data/app.db
       REDIS_HOST: disabled
+      OTEL_ENABLED: "false"
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost,http://127.0.0.1,http://localhost:80,http://127.0.0.1:80,http://localhost:3000}
     volumes:
       - ./.env:/app/.env:ro
       - app_data:/app/data
+    networks:
+      - ytv-network
+
+  frontend:
+    image: ${FRONTEND_IMAGE:-ytv-frontend:latest}
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        API_INTERNAL_URL: http://backend:8000
+        NEXT_PUBLIC_API_URL: http://localhost
+    container_name: ytv-frontend
+    restart: unless-stopped
+    expose:
+      - "3000"
+    environment:
+      ENV_FILE_PATH: /app/.env
+      API_INTERNAL_URL: http://backend:8000
+    volumes:
+      - ./.env:/app/.env:ro
+    depends_on:
+      - backend
+    networks:
+      - ytv-network
+
+  nginx:
+    image: nginx:alpine
+    container_name: ytv-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    volumes:
+      - ./docker/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - frontend
+      - backend
+    networks:
+      - ytv-network
 
 volumes:
   app_data:
+
+networks:
+  ytv-network:
+    driver: bridge
