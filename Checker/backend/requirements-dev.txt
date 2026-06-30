@@ -10,3 +10,4 @@ black==24.10.0
 ruff==0.8.4
 mypy==1.14.0
 bandit==1.8.0
+pyotp
