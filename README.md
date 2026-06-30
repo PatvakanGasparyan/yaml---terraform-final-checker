@@ -93,9 +93,23 @@ docker compose -f docker-compose.prod.yml up -d
 ```
 
 The application will be available at:
-- **Frontend**: http://0.0.0.0:3000
-- **API**: http://0.0.0.0:8000
-- **API Docs**: http://0.0.0.0:8000/docs
+- **Website (EC2)**: `http://YOUR_EC2_IP/` (port **80**)
+- **API docs**: `http://YOUR_EC2_IP/docs`
+- **Health**: `http://YOUR_EC2_IP/health`
+
+### EC2 not working? Checklist
+
+1. **AWS Security Group** — open inbound **TCP 80** (and 22 for SSH)
+2. **Use your public IP**, not `localhost` or `0.0.0.0`
+3. **GitHub secret `EC2_HOST`** = your public IP (e.g. `51.21.100.50`)
+4. On server run:
+   ```bash
+   cd ~/yaml-validator/Checker
+   sudo docker compose -f docker-compose.ec2.yml ps
+   sudo docker compose -f docker-compose.ec2.yml logs backend --tail=50
+   curl http://127.0.0.1/health
+   ```
+5. Free disk if build failed: `sudo docker system prune -af`
 
 ## Environment Variables
 

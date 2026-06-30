@@ -78,10 +78,14 @@ def ensure_env_file() -> Path:
     """
     Ensure the .env file exists on disk.
 
-    1. Fetch from S3 when ENV_S3_BUCKET is configured
-    2. Fall back to .env.example for local development only
+    1. Use existing file if already present (EC2 deploy downloads before Docker start)
+    2. Fetch from S3 when ENV_S3_BUCKET is configured and file is missing
+    3. Fall back to .env.example for local development only
     """
     path = resolve_env_file_path()
+
+    if path.is_file() and path.stat().st_size > 0:
+        return path
 
     if os.environ.get("ENV_S3_BUCKET"):
         fetch_env_from_s3(path)
