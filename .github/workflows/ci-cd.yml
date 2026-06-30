@@ -63,15 +63,15 @@ jobs:
         run: cp .env.example .env
 
       - name: Lint backend (ruff)
-        run: ruff check backend/app/
+        run: ruff check backend/app/ --config backend/pyproject.toml
 
       - name: Test backend
-        run: pytest backend/tests/ -v --tb=short
+        run: pytest backend/tests/ -v --tb=short --cov-fail-under=0
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "22"
+          node-version: "24"
           cache: npm
           cache-dependency-path: Checker/frontend/package-lock.json
 

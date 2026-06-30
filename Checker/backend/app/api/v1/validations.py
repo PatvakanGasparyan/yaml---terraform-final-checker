@@ -16,7 +16,6 @@ from app.core.database import get_db
 from app.models import User, ValidationHistory
 from app.schemas import (
     PaginatedResponse,
-    ValidationHistoryFilter,
     ValidationHistoryResponse,
     ValidationRequest,
     ValidationResponse,

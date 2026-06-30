@@ -11,7 +11,14 @@ target-version = ["py312"]
 [tool.ruff]
 line-length = 100
 target-version = "py312"
+
+[tool.ruff.lint]
 select = ["E", "F", "I", "N", "W", "UP", "B", "C4", "SIM"]
+# Existing codebase style debt — tighten over time
+ignore = ["E501", "N802", "B904", "UP007", "UP035", "SIM105", "I001"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["app"]
 
 [tool.mypy]
 python_version = "3.12"

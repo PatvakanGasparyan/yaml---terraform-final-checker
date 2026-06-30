@@ -6,8 +6,8 @@ OpenTelemetry, rate limiting, CORS, and route registration.
 """
 
 import logging
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
-from typing import AsyncGenerator
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -19,13 +19,12 @@ from slowapi.util import get_remote_address
 from sqlalchemy import text
 from starlette.responses import Response
 
+from app.api.deps import get_guest_user
 from app.api.v1 import api_router
 from app.core.config import get_settings
-from app.core.database import engine, init_db
+from app.core.database import AsyncSessionLocal, engine, init_db
 from app.schemas import HealthResponse
-from app.api.deps import get_guest_user
 from app.services.auth_service import AuthService
-from app.core.database import AsyncSessionLocal
 
 settings = get_settings()
 logger = logging.getLogger(__name__)
@@ -46,7 +45,6 @@ def setup_opentelemetry() -> None:
     try:
         from opentelemetry import trace
         from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
-        from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
         from opentelemetry.instrumentation.sqlalchemy import SQLAlchemyInstrumentor
         from opentelemetry.sdk.resources import Resource
         from opentelemetry.sdk.trace import TracerProvider
