@@ -72,11 +72,13 @@ class YamlValidator:
         parsed = syntax_result.parsed_content
 
         if not syntax_result.is_valid:
+            # Tab/whitespace checks use raw lines and must run even when parse fails
+            findings.extend(self._analyze_best_practices())
             return YamlValidationResult(
                 is_valid=False,
                 findings=findings,
                 file_type=file_type,
-                metadata={"checks_run": ["syntax"]},
+                metadata={"checks_run": ["syntax", "best_practices"]},
             )
 
         # Step 2: Duplicate key detection

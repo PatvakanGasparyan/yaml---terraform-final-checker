@@ -20,7 +20,7 @@ from app.core.security import (
     verify_mfa_token,
     verify_password,
 )
-from app.models import Role, User
+from app.models import Role, User, UserRoleAssociation
 from app.schemas import TokenResponse, UserCreate, UserLogin, UserResponse
 
 settings = get_settings()
@@ -70,14 +70,18 @@ class AuthService:
         self.db.add(user)
         await self.db.flush()
 
-        # Assign default developer role
+        # Assign default developer role (direct association — avoids async lazy-load)
         role_result = await self.db.execute(select(Role).where(Role.name == "developer"))
         role = role_result.scalar_one_or_none()
         if role:
-            user.roles.append(role)
+            self.db.add(UserRoleAssociation(user_id=user.id, role_id=role.id))
 
         await self.db.commit()
-        await self.db.refresh(user, ["roles"])
+
+        result = await self.db.execute(
+            select(User).options(selectinload(User.roles)).where(User.id == user.id)
+        )
+        user = result.scalar_one()
 
         return UserResponse(
             id=user.id,
