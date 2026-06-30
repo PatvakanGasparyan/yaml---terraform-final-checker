@@ -1,9 +1,9 @@
-# Docker Compose — lightweight stack (app only)
-# Optional: docker compose --profile proxy up -d   (nginx on :80)
-# Optional: docker compose --profile monitoring up -d  (not included by default)
+# Docker Compose — minimal stack (4 containers by default)
+# Optional: docker compose --profile worker up -d   (celery + beat)
+# Optional: docker compose --profile proxy up -d    (nginx on :80)
 services:
   mysql:
-    image: mysql:8.0
+    image: mysql:8.0-bookworm
     container_name: ytv-mysql
     restart: unless-stopped
     env_file:
@@ -32,10 +32,9 @@ services:
     image: redis:7-alpine
     container_name: ytv-redis
     restart: unless-stopped
+    command: redis-server --save "" --appendonly no
     ports:
       - "6379:6379"
-    volumes:
-      - redis_data:/data
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
@@ -48,17 +47,13 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
+    image: ytv-backend:latest
     container_name: ytv-backend
     restart: unless-stopped
     environment:
       ENV_FILE_PATH: /app/.env
-      ENV_S3_BUCKET: ${ENV_S3_BUCKET:-}
-      ENV_S3_KEY: ${ENV_S3_KEY:-.env}
-      AWS_DEFAULT_REGION: ${AWS_DEFAULT_REGION:-}
     volumes:
       - ./.env:/app/.env:ro
-      - ./backend:/app
-      - backup_data:/backups
     ports:
       - "8000:8000"
     depends_on:
@@ -69,49 +64,6 @@ services:
     networks:
       - ytv-network
 
-  worker:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-    container_name: ytv-worker
-    restart: unless-stopped
-    command: ["celery", "-A", "app.workers.celery_app", "worker", "--loglevel=info", "--concurrency=2"]
-    environment:
-      ENV_FILE_PATH: /app/.env
-      ENV_S3_BUCKET: ${ENV_S3_BUCKET:-}
-      ENV_S3_KEY: ${ENV_S3_KEY:-.env}
-      AWS_DEFAULT_REGION: ${AWS_DEFAULT_REGION:-}
-    volumes:
-      - ./.env:/app/.env:ro
-      - ./backend:/app
-      - backup_data:/backups
-    depends_on:
-      mysql:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    networks:
-      - ytv-network
-
-  scheduler:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-    container_name: ytv-scheduler
-    restart: unless-stopped
-    command: ["celery", "-A", "app.workers.celery_app", "beat", "--loglevel=info"]
-    environment:
-      ENV_FILE_PATH: /app/.env
-      ENV_S3_BUCKET: ${ENV_S3_BUCKET:-}
-      ENV_S3_KEY: ${ENV_S3_KEY:-.env}
-      AWS_DEFAULT_REGION: ${AWS_DEFAULT_REGION:-}
-    volumes:
-      - ./.env:/app/.env:ro
-    depends_on:
-      - redis
-    networks:
-      - ytv-network
-
   frontend:
     build:
       context: ./frontend
@@ -119,6 +71,7 @@ services:
       args:
         API_INTERNAL_URL: ${API_INTERNAL_URL:-http://backend:8000}
         NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000}
+    image: ytv-frontend:latest
     container_name: ytv-frontend
     restart: unless-stopped
     environment:
@@ -129,6 +82,40 @@ services:
       - "3000:3000"
     depends_on:
       - backend
+    networks:
+      - ytv-network
+
+  worker:
+    profiles: ["worker"]
+    image: ytv-backend:latest
+    container_name: ytv-worker
+    restart: unless-stopped
+    command: ["celery", "-A", "app.workers.celery_app", "worker", "--loglevel=info", "--concurrency=1"]
+    environment:
+      ENV_FILE_PATH: /app/.env
+    volumes:
+      - ./.env:/app/.env:ro
+      - backup_data:/backups
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - ytv-network
+
+  scheduler:
+    profiles: ["worker"]
+    image: ytv-backend:latest
+    container_name: ytv-scheduler
+    restart: unless-stopped
+    command: ["celery", "-A", "app.workers.celery_app", "beat", "--loglevel=info"]
+    environment:
+      ENV_FILE_PATH: /app/.env
+    volumes:
+      - ./.env:/app/.env:ro
+    depends_on:
+      - redis
     networks:
       - ytv-network
 
@@ -149,7 +136,6 @@ services:
 
 volumes:
   mysql_data:
-  redis_data:
   backup_data:
 
 networks:

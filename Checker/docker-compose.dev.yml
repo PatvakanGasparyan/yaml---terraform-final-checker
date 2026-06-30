@@ -3,6 +3,7 @@ services:
   backend:
     command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
     volumes:
+      - ./.env:/app/.env:ro
       - ./backend:/app
 
   frontend:
@@ -21,6 +22,11 @@ services:
       API_INTERNAL_URL: http://backend:8000
 
   worker:
-    command: ["celery", "-A", "app.workers.celery_app", "worker", "--loglevel=debug", "--concurrency=2"]
+    profiles: ["worker"]
+    command: ["celery", "-A", "app.workers.celery_app", "worker", "--loglevel=debug", "--concurrency=1"]
     volumes:
+      - ./.env:/app/.env:ro
       - ./backend:/app
+
+  redis:
+    command: redis-server

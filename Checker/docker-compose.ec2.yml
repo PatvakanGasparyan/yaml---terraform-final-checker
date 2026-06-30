@@ -1,0 +1,50 @@
+# Ultra-light EC2 stack — 2 containers (~700 MB total images)
+# No MySQL (~500 MB), no Redis, no Celery
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.ec2
+    image: ytv-backend:latest
+    container_name: ytv-backend
+    restart: unless-stopped
+    environment:
+      ENV_FILE_PATH: /app/.env
+      DB_ENGINE: sqlite
+      SQLITE_PATH: /app/data/app.db
+      REDIS_HOST: disabled
+    volumes:
+      - ./.env:/app/.env:ro
+      - app_data:/app/data
+    ports:
+      - "8000:8000"
+    networks:
+      - ytv-network
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        API_INTERNAL_URL: ${API_INTERNAL_URL:-http://backend:8000}
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000}
+    image: ytv-frontend:latest
+    container_name: ytv-frontend
+    restart: unless-stopped
+    environment:
+      ENV_FILE_PATH: /app/.env
+    volumes:
+      - ./.env:/app/.env:ro
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+    networks:
+      - ytv-network
+
+volumes:
+  app_data:
+
+networks:
+  ytv-network:
+    driver: bridge

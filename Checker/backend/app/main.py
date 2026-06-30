@@ -147,23 +147,28 @@ async def health_check() -> HealthResponse:
     Checks database and Redis connectivity.
     """
     db_status = "healthy"
-    redis_status = "healthy"
-
     try:
         async with AsyncSessionLocal() as session:
             await session.execute(text("SELECT 1"))
     except Exception:
         db_status = "unhealthy"
 
-    try:
-        import redis
+    redis_status = "skipped"
+    if settings.redis_enabled:
+        redis_status = "healthy"
+        try:
+            import redis
 
-        r = redis.from_url(settings.REDIS_URL)
-        r.ping()
-    except Exception:
-        redis_status = "unhealthy"
+            r = redis.from_url(
+                f"redis://{settings.REDIS_HOST}:{settings.REDIS_PORT}/{settings.REDIS_DB}"
+            )
+            r.ping()
+        except Exception:
+            redis_status = "unhealthy"
 
-    overall = "healthy" if db_status == "healthy" and redis_status == "healthy" else "degraded"
+    db_required = db_status == "healthy"
+    redis_required = settings.redis_enabled and redis_status != "healthy"
+    overall = "healthy" if db_required and not redis_required else "degraded"
 
     return HealthResponse(
         status=overall,

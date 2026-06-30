@@ -1,10 +1,10 @@
-# Backend Dockerfile — multi-stage, minimal runtime image
+# EC2 minimal image — SQLite, no MySQL client
 FROM python:3.12-slim AS builder
 
 ENV PIP_NO_CACHE_DIR=1
 WORKDIR /app
 
-COPY requirements.txt .
+COPY requirements-minimal.txt requirements.txt
 RUN pip install --upgrade pip && pip install -r requirements.txt
 
 FROM python:3.12-slim AS runner
@@ -12,12 +12,16 @@ FROM python:3.12-slim AS runner
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
-    ENV_FILE_PATH=/app/.env
+    ENV_FILE_PATH=/app/.env \
+    DB_ENGINE=sqlite \
+    SQLITE_PATH=/app/data/app.db \
+    REDIS_HOST=disabled
 
 WORKDIR /app
 
 RUN apt-get update && apt-get install -y --no-install-recommends curl \
-    && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/* \
+    && mkdir -p /app/data
 
 COPY --from=builder /usr/local/lib/python3.12/site-packages /usr/local/lib/python3.12/site-packages
 COPY --from=builder /usr/local/bin /usr/local/bin

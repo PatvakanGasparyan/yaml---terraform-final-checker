@@ -53,25 +53,38 @@ See [docs/architecture.md](docs/architecture.md) for detailed diagrams.
 ### Prerequisites
 
 - Docker & Docker Compose v2+
-- 4GB RAM recommended
+- 4GB RAM minimum (8GB recommended for Docker builds)
+- EC2 minimal: **8 GB disk** | Full stack: **20 GB disk**
 - Ports: 3000, 8000, 3307, 6379
 
 ### Docker Setup
 
 ```bash
-# Clone and enter project directory
-cd yaml-terraform-validator
+cd Checker
+copy .env.example .env    # Windows
+# cp .env.example .env    # Linux/Mac
 
-# Build and start all services
 docker compose build
 docker compose up -d
-
-# View logs
-docker compose logs -f
-
-# Stop services
-docker compose down
 ```
+
+**EC2 minimal (recommended for small servers):** 2 containers, ~700 MB images, **8 GB disk OK**
+
+```bash
+cd Checker
+docker compose -f docker-compose.ec2.yml up -d --build
+```
+
+Uses **SQLite** (no MySQL) and **no Redis/Celery**.
+
+**Full stack (local dev / large server):**
+
+```bash
+cd Checker
+docker compose up -d --build
+```
+
+4 containers: mysql + redis + backend + frontend.
 
 ### Production Deployment
 

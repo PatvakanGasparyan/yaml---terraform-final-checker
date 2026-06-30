@@ -63,7 +63,9 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
 
-    # Database - MySQL
+    # Database
+    DB_ENGINE: Literal["sqlite", "mysql"] = "mysql"
+    SQLITE_PATH: str = "/app/data/app.db"
     MYSQL_HOST: str = "mysql"
     MYSQL_PORT: int = 3306
     MYSQL_USER: str = "validator"
@@ -75,7 +77,12 @@ class Settings(BaseSettings):
     @computed_field  # type: ignore[prop-decorator]
     @property
     def DATABASE_URL(self) -> str:
-        """Build async MySQL connection URL for SQLAlchemy."""
+        """Build async database URL for SQLAlchemy."""
+        if self.DB_ENGINE == "sqlite":
+            path = self.SQLITE_PATH
+            if path.startswith("/"):
+                return f"sqlite+aiosqlite:///{path}"
+            return f"sqlite+aiosqlite:///{path}"
         return (
             f"mysql+aiomysql://{self.MYSQL_USER}:{self.MYSQL_PASSWORD}"
             f"@{self.MYSQL_HOST}:{self.MYSQL_PORT}/{self.MYSQL_DATABASE}"
@@ -97,19 +104,22 @@ class Settings(BaseSettings):
 
     @computed_field  # type: ignore[prop-decorator]
     @property
-    def REDIS_URL(self) -> str:
-        """Build Redis connection URL for Celery broker and cache."""
-        return f"redis://{self.REDIS_HOST}:{self.REDIS_PORT}/{self.REDIS_DB}"
+    def redis_enabled(self) -> bool:
+        """Redis is optional (disabled for minimal EC2 deploy)."""
+        return bool(self.REDIS_HOST and self.REDIS_HOST not in ("disabled", "none", "skip"))
 
     CELERY_BROKER_URL: str = ""
     CELERY_RESULT_BACKEND: str = ""
 
     def model_post_init(self, __context: object) -> None:
-        """Set Celery URLs from Redis if not explicitly configured."""
+        """Set Celery URLs from Redis when Redis is enabled."""
+        if not self.redis_enabled:
+            return
+        redis_url = f"redis://{self.REDIS_HOST}:{self.REDIS_PORT}/{self.REDIS_DB}"
         if not self.CELERY_BROKER_URL:
-            object.__setattr__(self, "CELERY_BROKER_URL", self.REDIS_URL)
+            object.__setattr__(self, "CELERY_BROKER_URL", redis_url)
         if not self.CELERY_RESULT_BACKEND:
-            object.__setattr__(self, "CELERY_RESULT_BACKEND", self.REDIS_URL)
+            object.__setattr__(self, "CELERY_RESULT_BACKEND", redis_url)
 
     # AI / LLM Configuration
     AI_PROVIDER: Literal["openai", "azure", "ollama", "local"] = "openai"

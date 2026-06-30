@@ -1,35 +1,15 @@
-# Production Docker Compose overrides
+# Production EC2 overrides — no extra containers, no dev mounts
 services:
+  mysql:
+    ports: []
+
+  redis:
+    ports: []
+
   backend:
-    deploy:
-      replicas: 2
-      resources:
-        limits:
-          cpus: "2"
-          memory: 2G
+    volumes:
+      - ./.env:/app/.env:ro
 
   frontend:
-    deploy:
-      replicas: 2
-
-  worker:
-    deploy:
-      replicas: 3
-      resources:
-        limits:
-          cpus: "1"
-          memory: 1G
-
-  mysql:
-    deploy:
-      resources:
-        limits:
-          cpus: "2"
-          memory: 4G
-
-  nginx:
-    ports:
-      - "443:443"
     volumes:
-      - ./docker/nginx/nginx.prod.conf:/etc/nginx/nginx.conf:ro
-      - ./docker/nginx/ssl:/etc/nginx/ssl:ro
+      - ./.env:/app/.env:ro
